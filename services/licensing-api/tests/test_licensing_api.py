@@ -1526,6 +1526,196 @@ def test_scenario_35_frontend_spa_routes_and_api_isolation(client):
     assert "application/json" in api_res.headers.get("content-type", "").lower()
 
 
+def test_scenario_36_portal_trial_once_and_login_never_resets_trial(client, admin_headers):
+    """Scenario 36: Portal signup grants trial once; login never resets trial clock; portal and admin dates match."""
+    # 1. Register new client via portal signup
+    signup_res = client.post("/api/v1/client/auth/signup", json={
+        "email": "single_trial@pharmacy.example",
+        "password": "TrialPassword2026!",
+        "pharmacy_name": "Single Trial Chemist",
+        "contact_person": "Sunita Verma",
+        "phone": "9876599001",
+    })
+    assert signup_res.status_code == 201
+    signup_data = signup_res.json()["data"]
+    client_token = signup_data["access_token"]
+    client_id = signup_data["client"]["id"]
+    client_h = {"Authorization": f"Bearer {client_token}"}
+
+    # Verify initial trial dates
+    portal_dash_1 = client.get("/api/v1/client/dashboard", headers=client_h).json()["data"]
+    start_date_1 = portal_dash_1["subscription"]["current_period_start"]
+    end_date_1 = portal_dash_1["subscription"]["current_period_end"]
+    days_rem_1 = portal_dash_1["days_remaining"]
+    assert days_rem_1 == 15
+    assert portal_dash_1["status"] == "TRIALING"
+
+    # 2. Duplicate signup attempt is rejected
+    dup_res = client.post("/api/v1/client/auth/signup", json={
+        "email": "single_trial@pharmacy.example",
+        "password": "TrialPassword2026!",
+        "pharmacy_name": "Duplicate Store",
+        "contact_person": "Sunita Verma",
+        "phone": "9876599001",
+    })
+    assert dup_res.status_code == 400
+
+    # 3. Attempting to start another trial for this client fails
+    extra_trial = client.post("/api/v1/subscriptions/start-trial", json={"client_id": client_id}, headers=admin_headers)
+    assert extra_trial.status_code in (400, 422)
+
+    # 4. Sign in to client account (desktop app sign-in simulation)
+    login_res = client.post("/api/v1/client/auth/login", json={
+        "email": "single_trial@pharmacy.example",
+        "password": "TrialPassword2026!",
+    })
+    assert login_res.status_code == 200
+    login_data = login_res.json()["data"]
+    assert login_data["license_token"] is not None
+
+    # Verify trial clock was NOT reset
+    portal_dash_2 = client.get("/api/v1/client/dashboard", headers=client_h).json()["data"]
+    assert portal_dash_2["subscription"]["current_period_start"] == start_date_1
+    assert portal_dash_2["subscription"]["current_period_end"] == end_date_1
+    assert portal_dash_2["days_remaining"] == days_rem_1
+
+    # 5. Admin client detail view dates match portal dashboard dates exactly
+    admin_client = client.get(f"/api/v1/clients/{client_id}", headers=admin_headers).json()["data"]
+    admin_sub = admin_client["subscriptions"][0]
+    assert admin_sub["current_period_start"] == start_date_1
+    assert admin_sub["current_period_end"] == end_date_1
+    assert admin_sub["is_trial"] is True
+
+
+def test_scenario_37_renewal_approval_active_vs_expired_and_signed_license_match(client, admin_headers, db_session):
+    """Scenario 37: Renewal approval correctly extends from active expiry vs expired approval date,
+    and issued license expiry matches DB."""
+    # A. Active subscription case: expiry is extended from current_period_end
+    c_res = client.post("/api/v1/client/signup", json={
+        "email": "active_renew@pharmacy.example",
+        "password": "ActivePassword2026!",
+        "business_name": "Active Renew Meds",
+        "owner_name": "Anil Active",
+        "phone": "9876599002",
+    })
+    c_data = c_res.json()["data"]
+    token_a = c_data["access_token"]
+    cid_a = c_data["client"]["id"]
+    h_a = {"Authorization": f"Bearer {token_a}"}
+
+    dash_a = client.get("/api/v1/client/dashboard", headers=h_a).json()["data"]
+    initial_exp = date.fromisoformat(dash_a["subscription"]["current_period_end"])
+
+    # Client submits monthly renewal request while active
+    req_res_a = client.post("/api/v1/client/renewal-requests", json={
+        "requested_plan_code": "MONTHLY_STANDARD",
+        "payment_reference": "UTR-ACTIVE-001",
+    }, headers=h_a)
+    assert req_res_a.status_code == 201
+    req_id_a = req_res_a.json()["data"]["id"]
+
+    # Admin approves
+    appr_res_a = client.post(f"/api/v1/renewal-requests/{req_id_a}/approve", json={
+        "payment_reference": "UTR-ACTIVE-001",
+    }, headers=admin_headers)
+    assert appr_res_a.status_code == 200
+
+    dash_a_after = client.get("/api/v1/client/dashboard", headers=h_a).json()["data"]
+    new_exp_a = date.fromisoformat(dash_a_after["subscription"]["current_period_end"])
+    # Should extend from initial_exp by 30 days
+    assert new_exp_a == initial_exp + timedelta(days=30)
+    # Signed license expiry matches DB current_period_end
+    lic_a = client.get("/api/v1/client/license/download", headers=h_a).json()
+    assert lic_a["expiry_date"] == new_exp_a.isoformat()
+
+    # Approving again fails (idempotent / duplicate approval protection)
+    dup_appr = client.post(f"/api/v1/renewal-requests/{req_id_a}/approve", json={}, headers=admin_headers)
+    assert dup_appr.status_code in (400, 422)
+
+    # B. Expired subscription case: expiry extends from today
+    c_res_exp = client.post("/api/v1/client/signup", json={
+        "business_name": "Expired Chemist",
+        "owner_name": "Ravi Expired",
+        "phone": "9876599003",
+        "email": "expired@pharmacy.example",
+        "password": "ExpiredPassword2026!",
+    })
+    assert c_res_exp.status_code == 201
+    c_data_exp = c_res_exp.json()["data"]
+    token_exp = c_data_exp["access_token"]
+    cid_exp = c_data_exp["client"]["id"]
+    h_exp = {"Authorization": f"Bearer {token_exp}"}
+
+    # Manually expire client B's subscription in database
+    from licensing_service.db.models import Subscription
+    sub = db_session.query(Subscription).filter(Subscription.client_id == cid_exp).first()
+    assert sub is not None
+    sub.current_period_end = date.today() - timedelta(days=20)
+    sub.grace_period_end = date.today() - timedelta(days=10)
+    sub.status = "EXPIRED"
+    db_session.commit()
+
+    # Submit renewal request for expired client
+    req_exp = client.post("/api/v1/client/renewal-requests", json={
+        "requested_plan_code": "MONTHLY_STANDARD",
+        "payment_reference": "UTR-EXPIRED-002",
+    }, headers=h_exp)
+    assert req_exp.status_code == 201
+    req_id_exp = req_exp.json()["data"]["id"]
+
+    # Admin approves renewal for expired client
+    appr_exp = client.post(f"/api/v1/renewal-requests/{req_id_exp}/approve", json={
+        "payment_reference": "UTR-EXPIRED-002",
+    }, headers=admin_headers)
+    assert appr_exp.status_code == 200
+
+    admin_detail = client.get(f"/api/v1/clients/{cid_exp}", headers=admin_headers).json()["data"]
+    latest_sub = admin_detail["subscriptions"][0]
+    expected_exp = (date.today() + timedelta(days=30)).isoformat()
+    assert latest_sub["current_period_end"] == expected_exp
+    latest_lic = admin_detail["licenses"][-1]
+    assert latest_lic["expiry_date"] == expected_exp
+    # Client download also retrieves the newly issued license with matching expiry
+    dl_exp = client.get("/api/v1/client/license/download", headers=h_exp).json()
+    assert dl_exp["expiry_date"] == expected_exp
+
+
+def test_scenario_38_download_audit_logging(client, admin_headers):
+    """Scenario 38: Client and vendor license downloads are recorded in audit logs without leaking secrets."""
+    c_res = client.post("/api/v1/client/signup", json={
+        "email": "audit_download@pharmacy.example",
+        "password": "AuditPassword2026!",
+        "business_name": "Audit Download Chemist",
+        "owner_name": "Deepak Audit",
+        "phone": "9876599004",
+    })
+    c_data = c_res.json()["data"]
+    client_h = {"Authorization": f"Bearer {c_data['access_token']}"}
+    lic_id = c_data["license_token"]["license_id"]
+
+    # Client downloads license
+    dl_res = client.get("/api/v1/client/license/download", headers=client_h)
+    assert dl_res.status_code == 200
+
+    # Vendor downloads license
+    vdl_res = client.get(f"/api/v1/licenses/{lic_id}/download", headers=admin_headers)
+    assert vdl_res.status_code == 200
+
+    # Check audit events
+    audit_res = client.get("/api/v1/audit", headers=admin_headers)
+    assert audit_res.status_code == 200
+    events = audit_res.json()["data"]
+    actions = [e["action"] for e in events]
+    assert "CLIENT_LICENSE_DOWNLOAD" in actions
+    assert "VENDOR_LICENSE_DOWNLOAD" in actions
+
+    # Verify no passwords in audit metadata
+    raw_audit = json.dumps(events)
+    assert "AuditPassword2026!" not in raw_audit
+    assert "password_hash" not in raw_audit
+
+
+
 
 
 

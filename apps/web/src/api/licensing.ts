@@ -25,6 +25,21 @@ export function getLicensingApiBase(): string {
   return (envUrl || "http://127.0.0.1:8000").replace(/\/+$/, "");
 }
 
+/**
+ * Resolve online customer portal web URL for client account creation, dashboard, and renewals.
+ */
+export function getPortalUrl(): string {
+  const envPortal = (import.meta as any).env?.VITE_PORTAL_URL;
+  if (envPortal) {
+    return envPortal.replace(/\/+$/, "");
+  }
+  const licensingApi = getLicensingApiBase();
+  if (licensingApi.includes("127.0.0.1") || licensingApi.includes("localhost")) {
+    return "http://localhost:5173";
+  }
+  return "https://portal.apexhealth.com";
+}
+
 export interface ClientSignupInput {
   business_name: string;
   owner_name: string;

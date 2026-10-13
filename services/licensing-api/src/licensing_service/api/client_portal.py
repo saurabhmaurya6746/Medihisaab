@@ -383,6 +383,7 @@ def get_dashboard(
 # 3. LICENSE DOWNLOAD
 @router.get("/license/download")
 def download_license(
+    request: Request,
     current_client: Client = Depends(get_current_client),
     db: Session = Depends(get_db),
 ):
@@ -402,6 +403,21 @@ def download_license(
     payload = get_license_download_payload(lic)
     filename = f"{lic.license_id}.json"
     content = json.dumps(payload, indent=2)
+
+    client_ip = request.client.host if request.client else "unknown"
+    log_audit_event(
+        db=db,
+        user_email=current_client.email,
+        action="CLIENT_LICENSE_DOWNLOAD",
+        entity_type="LICENSE",
+        entity_id=lic.license_id,
+        ip_address=client_ip,
+        metadata={
+            "client_code": current_client.client_code,
+            "license_id": lic.license_id,
+            "filename": filename,
+        },
+    )
 
     return Response(
         content=content,

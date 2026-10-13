@@ -120,6 +120,7 @@ def revoke_license_endpoint(
 @router.get("/{license_id}/download")
 def download_license_file(
     license_id: str,
+    request: Request,
     db: Session = Depends(get_db),
     user: VendorUser = Depends(get_current_vendor_user),
 ):
@@ -139,6 +140,17 @@ def download_license_file(
 
     payload = get_license_download_payload(lic)
     json_bytes = json.dumps(payload, indent=2).encode("utf-8")
+
+    client_ip = request.client.host if request and request.client else None
+    log_audit_event(
+        db=db,
+        user_email=user.email,
+        action="VENDOR_LICENSE_DOWNLOAD",
+        entity_type="LICENSE",
+        entity_id=lic.license_id,
+        ip_address=client_ip,
+        metadata={"client_id": lic.client_id, "license_id": lic.license_id},
+    )
 
     return Response(
         content=json_bytes,

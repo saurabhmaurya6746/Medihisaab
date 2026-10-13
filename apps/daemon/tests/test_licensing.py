@@ -613,4 +613,113 @@ def test_unsupported_version_and_malformed_grace_period_rejection():
     assert status_neg.status == "MALFORMED_LICENSE"
 
 
+def test_import_rejects_client_mismatch_and_preserves_valid_license(client: TestClient):
+    """Ensure that importing a license for another client is rejected (400),
+    and the current active license is safely preserved without corruption."""
+    setup_payload = {
+        "username": "admin_mismatch",
+        "full_name": "Admin Mismatch",
+        "password": "Password123!",
+        "confirm_password": "Password123!",
+        "store_name": "First Care Pharmacy",
+    }
+    setup_res = client.post("/api/v1/auth/first-run-setup", json=setup_payload)
+    assert setup_res.status_code == 201
+    admin_token = setup_res.json()["access_token"]
+    admin_h = {"Authorization": f"Bearer {admin_token}"}
+
+    # 1. Install genuine license for "First Care Pharmacy"
+    valid_payload = {
+        "client_name": "First Care Pharmacy",
+        "license_id": "LIC-FIRST-01",
+        "terminal_count": 5,
+        "activation_date": date.today().isoformat(),
+        "expiry_date": (date.today() + timedelta(days=365)).isoformat(),
+        "edition": "COMMERCIAL",
+        "features": "ALL",
+    }
+    valid_payload["signature"] = sign_license(valid_payload, PRIVATE_KEY_PATH)
+
+    res1 = client.post("/api/v1/system/license", json=valid_payload, headers=admin_h)
+    assert res1.status_code == 200
+    assert res1.json()["data"]["client_name"] == "First Care Pharmacy"
+    assert res1.json()["data"]["license_id"] == "LIC-FIRST-01"
+
+    # 2. Attempt to import valid license belonging to another client
+    other_client_payload = {
+        "client_name": "Second Care Pharmacy",
+        "license_id": "LIC-SECOND-99",
+        "terminal_count": 10,
+        "activation_date": date.today().isoformat(),
+        "expiry_date": (date.today() + timedelta(days=365)).isoformat(),
+        "edition": "COMMERCIAL",
+        "features": "ALL",
+    }
+    other_client_payload["signature"] = sign_license(other_client_payload, PRIVATE_KEY_PATH)
+
+    mismatch_res = client.post("/api/v1/system/license", json=other_client_payload, headers=admin_h)
+    assert mismatch_res.status_code == 400
+    assert "License client mismatch" in mismatch_res.json()["detail"]
+
+    # Verify existing license is untouched
+    current_res = client.get("/api/v1/system/license", headers=admin_h)
+    assert current_res.status_code == 200
+    assert current_res.json()["data"]["client_name"] == "First Care Pharmacy"
+    assert current_res.json()["data"]["license_id"] == "LIC-FIRST-01"
+
+    # 3. Attempt to import expired license
+    expired_payload = {
+        "client_name": "First Care Pharmacy",
+        "license_id": "LIC-FIRST-EXP",
+        "terminal_count": 5,
+        "activation_date": (date.today() - timedelta(days=60)).isoformat(),
+        "expiry_date": (date.today() - timedelta(days=30)).isoformat(),
+        "edition": "COMMERCIAL",
+        "features": "ALL",
+    }
+    expired_payload["signature"] = sign_license(expired_payload, PRIVATE_KEY_PATH)
+
+    exp_res = client.post("/api/v1/system/license", json=expired_payload, headers=admin_h)
+    assert exp_res.status_code == 400
+    assert "Invalid license" in exp_res.json()["detail"]
+
+    # Verify existing license still untouched
+    current_res2 = client.get("/api/v1/system/license", headers=admin_h)
+    assert current_res2.json()["data"]["license_id"] == "LIC-FIRST-01"
+
+    # 4. Attempt to import tampered license
+    tampered_payload = dict(valid_payload)
+    tampered_payload["terminal_count"] = 999
+
+    tamp_res = client.post("/api/v1/system/license", json=tampered_payload, headers=admin_h)
+    assert tamp_res.status_code == 400
+    assert "Invalid license" in tamp_res.json()["detail"]
+
+    # Verify existing license still untouched
+    current_res3 = client.get("/api/v1/system/license", headers=admin_h)
+    assert current_res3.json()["data"]["license_id"] == "LIC-FIRST-01"
+
+    # 5. Import legitimate renewed license for the same client succeeds
+    renewed_payload = {
+        "client_name": "First Care Pharmacy",
+        "license_id": "LIC-FIRST-02-RENEWED",
+        "terminal_count": 8,
+        "activation_date": date.today().isoformat(),
+        "expiry_date": (date.today() + timedelta(days=730)).isoformat(),
+        "edition": "COMMERCIAL",
+        "features": "ALL",
+    }
+    renewed_payload["signature"] = sign_license(renewed_payload, PRIVATE_KEY_PATH)
+
+    renew_ok = client.post("/api/v1/system/license", json=renewed_payload, headers=admin_h)
+    assert renew_ok.status_code == 200
+    assert renew_ok.json()["data"]["license_id"] == "LIC-FIRST-02-RENEWED"
+    assert renew_ok.json()["data"]["terminal_count"] == 8
+
+    # Verify updated license is persisted
+    current_res4 = client.get("/api/v1/system/license", headers=admin_h)
+    assert current_res4.json()["data"]["license_id"] == "LIC-FIRST-02-RENEWED"
+
+
+
 

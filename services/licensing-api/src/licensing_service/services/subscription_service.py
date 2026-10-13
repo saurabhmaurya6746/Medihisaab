@@ -167,16 +167,17 @@ def convert_trial_to_paid(
         raise ValueError(f"Plan {plan_id} not found.")
 
     today = date.today()
+    base_date = sub.current_period_end if (sub.current_period_end and sub.current_period_end >= today) else today
     sub.plan_id = plan.id
     sub.is_trial = False
     sub.status = SubscriptionStatus.ACTIVE.value
-    sub.current_period_start = today
+    sub.current_period_start = base_date
 
     if expiry_date:
         sub.current_period_end = expiry_date
         sub.grace_period_end = expiry_date + timedelta(days=14)
     else:
-        end_date, grace_date = calculate_period_dates(today, plan.billing_period)
+        end_date, grace_date = calculate_period_dates(base_date, plan.billing_period)
         sub.current_period_end = end_date
         sub.grace_period_end = grace_date
 

@@ -984,8 +984,21 @@ def apply_license(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid license: {lic_status.message}",
         )
+
     config = _get_active_app_config(request)
     mgr = LicenseManager(config.app_dir / "license.json")
+    existing_payload = mgr.load_license()
+    if existing_payload and existing_payload.get("license_id") != "LIC-TEST-DEFAULT":
+        existing_status = mgr.get_status()
+        if existing_status.is_valid and existing_status.status in ("ACTIVE", "TRIAL", "GRACE_PERIOD"):
+            existing_client = str(existing_payload.get("client_name", "")).strip().lower()
+            incoming_client = str(payload.get("client_name", "")).strip().lower()
+            if existing_client and incoming_client and existing_client != incoming_client:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"License client mismatch: License is issued for '{payload.get('client_name')}', but this installation is already licensed to '{existing_payload.get('client_name')}'.",
+                )
+
     mgr.save_license(payload)
     return SuccessResponse(data=asdict(lic_status))
 

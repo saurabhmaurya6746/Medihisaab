@@ -9,7 +9,9 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
 import json
 import logging
+import os
 from pathlib import Path
+import tempfile
 from typing import Any, Dict, Optional, Union
 
 from cryptography.exceptions import InvalidSignature
@@ -382,7 +384,28 @@ class LicenseManager:
     def save_license(self, payload: Dict[str, Any]) -> None:
         """Atomically persist license file to disk."""
         self.license_path.parent.mkdir(parents=True, exist_ok=True)
-        self.license_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temp_file = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self.license_path.parent,
+                prefix="license_tmp_",
+                suffix=".json",
+                delete=False,
+            ) as tf:
+                temp_file = Path(tf.name)
+                json.dump(payload, tf, indent=2)
+                tf.flush()
+                os.fsync(tf.fileno())
+            os.replace(temp_file, self.license_path)
+        except Exception:
+            if temp_file and temp_file.exists():
+                try:
+                    temp_file.unlink()
+                except Exception:
+                    pass
+            raise
         self._record_verified_date(date.today())
 
     def _get_last_verified_date(self) -> Optional[date]:

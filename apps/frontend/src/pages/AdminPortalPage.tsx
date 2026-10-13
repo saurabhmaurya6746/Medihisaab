@@ -556,24 +556,158 @@ export function AdminPortalPage() {
                     </dl>
                   </div>
 
+                  {/* Authoritative Current Subscription & License State */}
+                  {(() => {
+                    const latestSub = selectedClient.subscriptions && selectedClient.subscriptions.length > 0
+                      ? selectedClient.subscriptions[0]
+                      : null;
+                    const latestLic = selectedClient.licenses && selectedClient.licenses.length > 0
+                      ? selectedClient.licenses[0]
+                      : null;
+                    
+                    const todayDate = new Date();
+                    todayDate.setHours(0, 0, 0, 0);
+
+                    let daysRemaining: number | null = null;
+                    let isGraceActive = false;
+                    let displayStatus = latestSub ? latestSub.status : "INACTIVE";
+
+                    if (latestSub && latestSub.current_period_end) {
+                      const periodEnd = new Date(latestSub.current_period_end);
+                      periodEnd.setHours(0, 0, 0, 0);
+                      const graceEnd = latestSub.grace_period_end ? new Date(latestSub.grace_period_end) : periodEnd;
+                      graceEnd.setHours(0, 0, 0, 0);
+
+                      const diffTime = periodEnd.getTime() - todayDate.getTime();
+                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                      if (diffDays >= 0) {
+                        daysRemaining = diffDays;
+                        isGraceActive = false;
+                      } else {
+                        const graceDiffTime = graceEnd.getTime() - todayDate.getTime();
+                        const graceDiffDays = Math.ceil(graceDiffTime / (1000 * 60 * 60 * 24));
+                        if (graceDiffDays >= 0) {
+                          daysRemaining = graceDiffDays;
+                          isGraceActive = true;
+                          displayStatus = "GRACE_PERIOD";
+                        } else {
+                          daysRemaining = 0;
+                          isGraceActive = false;
+                          displayStatus = "EXPIRED";
+                        }
+                      }
+                    }
+
+                    return (
+                      <div className="rounded-lg border bg-card p-6">
+                        <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              Authoritative Subscription State
+                            </p>
+                            <h3 className="text-xl font-bold mt-1">
+                              {latestSub?.plan?.name || (latestSub?.is_trial ? "Evaluation Trial Plan" : "Standard Plan")}
+                            </h3>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`rounded px-2.5 py-1 text-xs font-semibold ${
+                                displayStatus === "ACTIVE"
+                                  ? "bg-secondary text-secondary-foreground"
+                                  : displayStatus === "TRIALING"
+                                    ? "bg-info-surface text-info"
+                                    : displayStatus === "GRACE_PERIOD"
+                                      ? "bg-warning-surface text-warning"
+                                      : "bg-destructive-surface text-destructive"
+                              }`}
+                            >
+                              {displayStatus === "TRIALING" ? "EVALUATION TRIAL" : displayStatus}
+                            </span>
+                            {daysRemaining !== null && (
+                              <span className="font-mono text-sm font-semibold text-primary">
+                                {daysRemaining} days remaining
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <dl className="mt-4 grid gap-4 sm:grid-cols-4">
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Subscription Type</dt>
+                            <dd className="font-medium text-sm">
+                              {latestSub?.is_trial ? "15-Day Free Trial" : "Commercial Paid Subscription"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Current Period</dt>
+                            <dd className="font-medium text-sm">
+                              {latestSub ? `${latestSub.current_period_start} to ${latestSub.current_period_end}` : "None"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Grace Period Status</dt>
+                            <dd className="font-medium text-sm">
+                              {isGraceActive
+                                ? `Active (Ends: ${latestSub?.grace_period_end})`
+                                : latestSub?.grace_period_end
+                                  ? `Ends ${latestSub.grace_period_end}`
+                                  : "None"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Active License Token</dt>
+                            <dd className="font-mono text-xs text-primary font-semibold truncate flex items-center justify-between">
+                              <span>{latestLic?.license_id || "None Issued"}</span>
+                              {latestLic && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={() => handleDownloadLicenseFile(latestLic.license_id)}
+                                >
+                                  <Download className="size-3" />
+                                </Button>
+                              )}
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+                    );
+                  })()}
+
                   {/* Subscriptions of this client */}
                   <div className="rounded-lg border bg-card">
                     <div className="border-b p-4">
-                      <h3 className="font-semibold text-sm">Client Subscription History</h3>
+                      <h3 className="font-semibold text-sm">Client Subscription History ({selectedClient.subscriptions.length})</h3>
                     </div>
                     <div className="divide-y text-sm">
-                      {selectedClient.subscriptions.map((s) => (
-                        <div key={s.id} className="p-4 flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold">
-                              Subscription #{s.id} · {s.status}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Period: {s.current_period_start} to {s.current_period_end} (Grace ends: {s.grace_period_end})
-                            </p>
+                      {selectedClient.subscriptions.length === 0 ? (
+                        <p className="p-4 text-xs text-muted-foreground">No subscription records found for this client.</p>
+                      ) : (
+                        selectedClient.subscriptions.map((s) => (
+                          <div key={s.id} className="p-4 flex items-center justify-between">
+                            <div>
+                              <p className="font-semibold">
+                                Subscription #{s.id} · {s.plan?.name || (s.is_trial ? "Evaluation Trial" : "Commercial Plan")}
+                                <span className={`ml-2 rounded px-2 py-0.5 text-xs font-semibold ${
+                                  s.status === "ACTIVE"
+                                    ? "bg-secondary text-secondary-foreground"
+                                    : s.status === "TRIALING"
+                                      ? "bg-info-surface text-info"
+                                      : "bg-destructive-surface text-destructive"
+                                }`}>
+                                  {s.status}
+                                </span>
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Period: {s.current_period_start} to {s.current_period_end} · Grace ends: {s.grace_period_end}
+                                {s.payment_reference ? ` · Payment Ref: ${s.payment_reference}` : ""}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </div>
 

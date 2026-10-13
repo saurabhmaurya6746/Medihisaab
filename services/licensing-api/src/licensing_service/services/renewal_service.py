@@ -184,53 +184,57 @@ def approve_renewal_request(
             .first()
         )
 
-    if target_sub and target_sub.is_trial:
-        sub = convert_trial_to_paid(
-            db=db,
-            subscription_id=target_sub.id,
-            plan_id=target_plan_id,
-            payment_reference=ref,
-            amount=amt or 0,
-            notes=notes or renewal.notes or f"Approved renewal request #{renewal.id}",
-            recorded_by_email=reviewer_email,
-        )
-    elif target_sub:
-        if target_plan_id and target_sub.plan_id != target_plan_id:
-            target_sub.plan_id = target_plan_id
-            db.commit()
-        sub = renew_subscription(
-            db=db,
-            subscription_id=target_sub.id,
-            payment_reference=ref,
-            amount=amt or 0,
-            notes=notes or renewal.notes or f"Approved renewal request #{renewal.id}",
-            recorded_by_email=reviewer_email,
-        )
-    else:
-        sub = create_subscription(
-            db=db,
-            client_id=renewal.client_id,
-            plan_id=target_plan_id,
-            payment_reference=ref,
-            amount=amt or 0,
-            notes=notes or renewal.notes or f"Approved renewal request #{renewal.id}",
-            recorded_by_email=reviewer_email,
-        )
+    try:
+        if target_sub and target_sub.is_trial:
+            sub = convert_trial_to_paid(
+                db=db,
+                subscription_id=target_sub.id,
+                plan_id=target_plan_id,
+                payment_reference=ref,
+                amount=amt or 0,
+                notes=notes or renewal.notes or f"Approved renewal request #{renewal.id}",
+                recorded_by_email=reviewer_email,
+            )
+        elif target_sub:
+            if target_plan_id and target_sub.plan_id != target_plan_id:
+                target_sub.plan_id = target_plan_id
+                db.commit()
+            sub = renew_subscription(
+                db=db,
+                subscription_id=target_sub.id,
+                payment_reference=ref,
+                amount=amt or 0,
+                notes=notes or renewal.notes or f"Approved renewal request #{renewal.id}",
+                recorded_by_email=reviewer_email,
+            )
+        else:
+            sub = create_subscription(
+                db=db,
+                client_id=renewal.client_id,
+                plan_id=target_plan_id,
+                payment_reference=ref,
+                amount=amt or 0,
+                notes=notes or renewal.notes or f"Approved renewal request #{renewal.id}",
+                recorded_by_email=reviewer_email,
+            )
 
-    # 2. Issue fresh signed Ed25519 renewal license
-    lic = issue_license(db=db, client_id=renewal.client_id, subscription_id=sub.id)
+        # 2. Issue fresh signed Ed25519 renewal license
+        lic = issue_license(db=db, client_id=renewal.client_id, subscription_id=sub.id)
 
-    # 3. Update renewal request status
-    now = datetime.now(timezone.utc)
-    renewal.status = "APPROVED"
-    renewal.subscription_id = sub.id
-    renewal.plan_id = target_plan_id
-    renewal.payment_reference = ref
-    renewal.payment_amount = amt
-    renewal.reviewed_by_email = reviewer_email
-    renewal.reviewed_at = now
-    db.commit()
-    db.refresh(renewal)
+        # 3. Update renewal request status
+        now = datetime.now(timezone.utc)
+        renewal.status = "APPROVED"
+        renewal.subscription_id = sub.id
+        renewal.plan_id = target_plan_id
+        renewal.payment_reference = ref
+        renewal.payment_amount = amt
+        renewal.reviewed_by_email = reviewer_email
+        renewal.reviewed_at = now
+        db.commit()
+        db.refresh(renewal)
+    except Exception:
+        db.rollback()
+        raise
 
     log_audit_event(
         db=db,
