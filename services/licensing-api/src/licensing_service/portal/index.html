@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vendor Licensing Portal — MediHisaab</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); line-height: 1.5; }
+    
+    /* Layout */
+    .app-header { background: var(--surface); border-bottom: 1px solid var(--surface-border); padding: 0.75rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .brand { display: flex; align-items: center; gap: 0.75rem; font-weight: 700; font-size: 1.15rem; }
+    .brand-badge { background: #3b82f6; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; }
+    .nav-tabs { display: flex; gap: 0.4rem; background: var(--surface); padding: 0.5rem 1.5rem; border-bottom: 1px solid var(--surface-border); overflow-x: auto; white-space: nowrap; }
+    .nav-btn { background: transparent; border: none; color: var(--text-muted); padding: 0.45rem 0.85rem; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 0.85rem; transition: all 0.15s; }
+    .nav-btn:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+    .nav-btn.active { color: white; background: var(--primary); }
+    
+    .container { max-width: 1240px; margin: 1.5rem auto; padding: 0 1rem; }
+    .card { background: var(--surface); border: 1px solid var(--surface-border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .card-title { font-size: 1.1rem; font-weight: 600; }
+    
+    /* Stats Grid */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card { background: var(--surface); border: 1px solid var(--surface-border); border-radius: var(--radius); padding: 1rem; }
+    .stat-val { font-size: 1.65rem; font-weight: 700; color: #60a5fa; }
+    .stat-lbl { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; }
+    
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { text-align: left; padding: 0.65rem 0.75rem; background: rgba(0,0,0,0.25); color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--surface-border); }
+    td { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--surface-border); color: #cbd5e1; vertical-align: middle; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    
+    /* Badges */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .badge-active { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-trial { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .badge-warn { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    
+    /* Buttons & Controls */
+    .btn { background: var(--primary); color: white; border: none; padding: 0.45rem 0.85rem; border-radius: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+    .btn:hover { background: var(--primary-hover); }
+    .btn-secondary { background: #475569; }
+    .btn-secondary:hover { background: #334155; }
+    .btn-success { background: #059669; }
+    .btn-success:hover { background: #047857; }
+    .btn-danger { background: #dc2626; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+    
+    input, select, textarea { background: #0f172a; border: 1px solid var(--surface-border); color: white; padding: 0.45rem 0.65rem; border-radius: 6px; font-size: 0.85rem; width: 100%; margin-top: 3px; margin-bottom: 8px; }
+    input:focus, select:focus, textarea:focus { outline: 1px solid var(--primary); }
+    
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 1rem; }
+    .modal-dialog { background: var(--surface); border: 1px solid var(--surface-border); border-radius: 8px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+    
+    /* Auth Form */
+    .login-box { max-width: 400px; margin: 5rem auto; background: var(--surface); border: 1px solid var(--surface-border); border-radius: 8px; padding: 2rem; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script>
+    const API_BASE = "/api/v1";
+    let token = sessionStorage.getItem("vendor_token") || null;
+    let currentUser = null;
+    let activeTab = "dashboard";
+    let dashboardStats = null;
+    let clientsList = [];
+    let plansList = [];
+    let subscriptionsList = [];
+    let paymentsList = [];
+    let licensesList = [];
+    let renewalRequestsList = [];
+    let usersList = [];
+    let auditList = [];
+    let settingsData = { default_trial_days: 15, default_grace_days: 7, settings: [], support_contacts: {} };
+    let activeModal = null;
+    let modalData = {};
+    let selectedClientDetail = null;
+
+    async function api(path, options = {}) {
+      const headers = { "Content-Type": "application/json", ...options.headers };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+      if (res.status === 401) {
+        logout();
+        throw new Error("Session expired.");
+      }
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.detail || json.message || "API request failed");
+      return json.data;
+    }
+
+    async function login(email, password) {
+      const data = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password })
+      });
+      token = data.access_token;
+      currentUser = data.user;
+      sessionStorage.setItem("vendor_token", token);
+      init();
+    }
+
+    function logout() {
+      token = null;
+      currentUser = null;
+      sessionStorage.removeItem("vendor_token");
+      render();
+    }
+
+    async function loadData() {
+      try {
+        if (!currentUser) currentUser = await api("/auth/me");
+        if (activeTab === "dashboard") {
+          dashboardStats = await api("/dashboard/stats");
+          renewalRequestsList = await api("/renewal-requests");
+        }
+        if (activeTab === "clients") clientsList = await api("/clients");
+        if (activeTab === "renewals") renewalRequestsList = await api("/renewal-requests");
+        if (activeTab === "plans" || activeTab === "renewals") plansList = await api("/plans?active_only=false");
+        if (activeTab === "trials" || activeTab === "subscriptions") subscriptionsList = await api("/subscriptions");
+        if (activeTab === "payments") paymentsList = await api("/payments");
+        if (activeTab === "licenses") licensesList = await api("/licenses");
+        if (activeTab === "users" && (currentUser.role === "OWNER" || currentUser.role === "ADMIN")) usersList = await api("/users");
+        if (activeTab === "audit") auditList = await api("/audit");
+        if (activeTab === "settings") settingsData = await api("/settings");
+      } catch (err) {
+        console.error("Load error:", err);
+      }
+      render();
+    }
+
+    function setTab(tab) {
+      activeTab = tab;
+      loadData();
+    }
+
+    async function init() {
+      if (token) {
+        try {
+          currentUser = await api("/auth/me");
+          await loadData();
+        } catch {
+          logout();
+        }
+      } else {
+        render();
+      }
+    }
+
+    function render() {
+      const app = document.getElementById("app");
+      if (!token) {
+        app.innerHTML = `
+          <div class="login-box">
+            <h2 style="margin-bottom: 0.5rem; text-align: center;">Vendor Licensing Portal</h2>
+            <p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-bottom: 1.5rem;">Pharmacy POS Central Management</p>
+            <form id="login-form">
+              <label style="font-size: 0.8rem; color: var(--text-muted);">Vendor Email</label>
+              <input type="email" id="login-email" value="owner@apexhealth.local" required />
+              <label style="font-size: 0.8rem; color: var(--text-muted);">Password</label>
+              <input type="password" id="login-password" value="OwnerSecurePass2026!" required />
+              <div id="login-err" style="color: var(--danger); font-size: 0.8rem; margin-bottom: 10px; display: none;"></div>
+              <button type="submit" class="btn" style="width: 100%; justify-content: center; padding: 0.6rem;">Sign In to Vendor Console</button>
+            </form>
+          </div>
+        `;
+        document.getElementById("login-form").onsubmit = async (e) => {
+          e.preventDefault();
+          const errDiv = document.getElementById("login-err");
+          errDiv.style.display = "none";
+          try {
+            await login(
+              document.getElementById("login-email").value,
+              document.getElementById("login-password").value
+            );
+          } catch (err) {
+            errDiv.innerText = err.message;
+            errDiv.style.display = "block";
+          }
+        };
+        return;
+      }
+
+      const isOwnerOrAdmin = currentUser && (currentUser.role === "OWNER" || currentUser.role === "ADMIN");
+
+      app.innerHTML = `
+        <header class="app-header">
+          <div class="brand">
+            <span>Apex Health • Central Licensing Portal</span>
+            <span class="brand-badge">${currentUser ? currentUser.role : ""}</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <span style="font-size: 0.85rem; color: var(--text-muted);">${currentUser ? currentUser.email : ""}</span>
+            <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+          </div>
+        </header>
+
+        <nav class="nav-tabs">
+          <button class="nav-btn ${activeTab === "dashboard" ? "active" : ""}" onclick="setTab('dashboard')">1. Dashboard</button>
+          <button class="nav-btn ${activeTab === "clients" ? "active" : ""}" onclick="setTab('clients')">2. Clients</button>
+          <button class="nav-btn ${activeTab === "renewals" ? "active" : ""}" onclick="setTab('renewals')">3. Renewal Requests ${(renewalRequestsList || []).filter(r => r.status === 'PENDING').length ? `(${(renewalRequestsList || []).filter(r => r.status === 'PENDING').length})` : ''}</button>
+          <button class="nav-btn ${activeTab === "plans" ? "active" : ""}" onclick="setTab('plans')">4. Plans</button>
+          <button class="nav-btn ${activeTab === "trials" ? "active" : ""}" onclick="setTab('trials')">5. Trials</button>
+          <button class="nav-btn ${activeTab === "subscriptions" ? "active" : ""}" onclick="setTab('subscriptions')">6. Subscriptions</button>
+          <button class="nav-btn ${activeTab === "payments" ? "active" : ""}" onclick="setTab('payments')">7. Payments</button>
+          <button class="nav-btn ${activeTab === "licenses" ? "active" : ""}" onclick="setTab('licenses')">8. Licenses</button>
+          ${isOwnerOrAdmin ? `<button class="nav-btn ${activeTab === "users" ? "active" : ""}" onclick="setTab('users')">9. Users</button>` : ''}
+          <button class="nav-btn ${activeTab === "audit" ? "active" : ""}" onclick="setTab('audit')">10. Audit History</button>
+          <button class="nav-btn ${activeTab === "settings" ? "active" : ""}" onclick="setTab('settings')">11. Settings</button>
+        </nav>
+
+        <main class="container">
+          ${renderTabContent()}
+        </main>
+
+        ${renderModal()}
+      `;
+    }
+
+    function renderTabContent() {
+      // 1. Dashboard
+      if (activeTab === "dashboard") {
+        if (!dashboardStats) return `<div class="card">Loading metrics...</div>`;
+        const pendingRenewalsCount = (renewalRequestsList || []).filter(r => r.status === 'PENDING').length;
+        return `
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-lbl">Total Clients</div><div class="stat-val">${dashboardStats.total_clients}</div></div>
+            <div class="stat-card"><div class="stat-lbl">Active Subscriptions</div><div class="stat-val" style="color: #34d399;">${dashboardStats.active_subscriptions}</div></div>
+            <div class="stat-card"><div class="stat-lbl">Trial Clients</div><div class="stat-val" style="color: #60a5fa;">${dashboardStats.trial_clients}</div></div>
+            <div class="stat-card" style="cursor:pointer;" onclick="setTab('renewals')"><div class="stat-lbl">Pending Renewals</div><div class="stat-val" style="color: #f59e0b;">${pendingRenewalsCount}</div></div>
+            <div class="stat-card"><div class="stat-lbl">Expiring Soon (14d)</div><div class="stat-val" style="color: #fbbf24;">${dashboardStats.expiring_soon_subscriptions}</div></div>
+            <div class="stat-card"><div class="stat-lbl">Expired / Grace</div><div class="stat-val" style="color: #f87171;">${dashboardStats.expired_subscriptions}</div></div>
+            <div class="stat-card"><div class="stat-lbl">Licenses Issued</div><div class="stat-val">${dashboardStats.total_licenses_issued}</div></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Recent Issued Licenses</span>
+              <button class="btn btn-sm" onclick="openModal('generateLicense')">+ Issue License</button>
+            </div>
+            <table>
+              <thead><tr><th>License ID</th><th>Client</th><th>Terminals</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                ${dashboardStats.recent_licenses.map(l => `
+                  <tr>
+                    <td><code style="color: #93c5fd;">${l.license_id}</code></td>
+                    <td><strong>${l.client_name}</strong></td>
+                    <td>${l.terminal_count} Counter(s)</td>
+                    <td>${l.expiry_date || 'Perpetual'}</td>
+                    <td><span class="badge ${l.revoked_at ? 'badge-danger' : 'badge-active'}">${l.revoked_at ? 'REVOKED' : 'ACTIVE'}</span></td>
+                    <td>
+                      <a href="/api/v1/licenses/${l.license_id}/download" target="_blank" class="btn btn-sm btn-secondary" style="text-decoration:none;">Download .json</a>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // 2. Clients
+      if (activeTab === "clients") {
+        return `
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Client Pharmacies (${clientsList.length})</span>
+              <button class="btn btn-sm" onclick="openModal('newClient')">+ Register Client</button>
+            </div>
+            <table>
+              <thead><tr><th>Code</th><th>Pharmacy Name</th><th>Owner</th><th>Contact</th><th>City</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                ${clientsList.map(c => `
+                  <tr>
+                    <td><code>${c.client_code}</code></td>
+                    <td><strong>${c.business_name}</strong></td>
+                    <td>${c.owner_name}</td>
+                    <td>${c.phone}<br/><small style="color:var(--text-muted);">${c.email}</small></td>
+                    <td>${c.city}, ${c.state}</td>
+                    <td><span class="badge ${c.status === 'ACTIVE' ? 'badge-active' : c.status === 'TRIAL' ? 'badge-trial' : 'badge-danger'}">${c.status}</span></td>
+                    <td>
+                      <button class="btn btn-sm btn-secondary" onclick="viewClientDetails(${c.id})">3. Details</button>
+                      <button class="btn btn-sm btn-secondary" onclick="openModal('startTrial', {client_id: ${c.id}})">Start Trial</button>
+                      <button class="btn btn-sm btn-secondary" onclick="openModal('generateLicense', {client_id: ${c.id}})">Issue Lic</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // 4. Plans
+      if (activeTab === "plans") {
+        return `
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Commercial Subscription Plans</span>
+              <button class="btn btn-sm" onclick="openModal('newPlan')">+ Create Plan</button>
+            </div>
+            <table>
+              <thead><tr><th>Code</th><th>Plan Name</th><th>Terminals</th><th>Period</th><th>Price</th><th>Features</th><th>Status</th></tr></thead>
+              <tbody>
+                ${plansList.map(p => `
+                  <tr>
+                    <td><code>${p.plan_code}</code></td>
+                    <td><strong>${p.name}</strong><br/><small style="color:var(--text-muted);">${p.description}</small></td>
+                    <td>${p.maximum_terminals} Workstation(s)</td>
+                    <td>${p.billing_period}</td>
+                    <td>₹${(p.price / 100).toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
+                    <td><small>${p.enabled_features}</small></td>
+                    <td><span class="badge ${p.is_active ? 'badge-active' : 'badge-danger'}">${p.is_active ? 'ACTIVE' : 'INACTIVE'}</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // 5. Trials
+      if (activeTab === "trials") {
+        const trials = subscriptionsList.filter(s => s.is_trial || s.status === 'TRIALING' || (s.plan && s.plan.billing_period === 'TRIAL'));
+        return `
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Active & Evaluation Trials (${trials.length})</span>
+              <button class="btn btn-sm" onclick="openModal('startTrial')">+ Start New Trial</button>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+              Trials operate offline on client machines with signed evaluation licenses. Convert to paid upon receiving manual payment.
+            </p>
+            <table>
+              <thead><tr><th>Sub ID</th><th>Client ID</th><th>Start Date</th><th>Trial End</th><th>Grace End</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                ${trials.map(s => `
+                  <tr>
+                    <td><code>SUB-#${s.id}</code></td>
+                    <td>Client #${s.client_id}</td>
+                    <td>${s.start_date}</td>
+                    <td><strong>${s.current_period_end}</strong></td>
+                    <td><span style="color:#fbbf24;">${s.grace_period_end}</span></td>
+                    <td><span class="badge ${s.status === 'TRIALING' ? 'badge-trial' : 'badge-warn'}">${s.status}</span></td>
+                    <td>
+                      <button class="btn btn-sm btn-success" onclick="openModal('convertPaid', {sub_id: ${s.id}, client_id: ${s.client_id}})">Convert to Paid</button>
+                      <button class="btn btn-sm btn-secondary" onclick="openModal('generateLicense', {client_id: ${s.client_id}, subscription_id: ${s.id}, edition: 'TRIAL'})">Get License</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // 6. Subscriptions
+      if (activeTab === "subscriptions") {
+        return `
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Client Subscriptions (${subscriptionsList.length})</span>
+              <button class="btn btn-sm" onclick="openModal('newPaidSub')">+ New Paid Subscription</button>
+            </div>
+            <table>
+              <thead><tr><th>Sub ID</th><th>Client ID</th><th>Plan</th><th>Period End</th><th>Grace End</th><th>Status</th><th>Payment Ref</th><th>Actions</th></tr></thead>
+              <tbody>
+                ${subscriptionsList.map(s => `
+                  <tr>
+                    <td><code>SUB-#${s.id}</code></td>
+                    <td>Client #${s.client_id}</td>
+                    <td>${s.plan ? s.plan.name : (s.is_trial ? 'Trial' : 'Commercial')}</td>
+                    <td>${s.current_period_end}</td>
+                    <td><span style="color:#fbbf24;">${s.grace_period_end}</span></td>
+                    <td><span class="badge ${s.status === 'ACTIVE' ? 'badge-active' : s.status === 'TRIALING' ? 'badge-trial' : s.status === 'SUSPENDED' ? 'badge-danger' : 'badge-warn'}">${s.status}</span></td>
+                    <td>${s.payment_reference || '<span style="color:var(--text-muted);">None</span>'}</td>
+                    <td>
+                      <button class="btn btn-sm btn-secondary" onclick="openModal('recordPayment', {sub_id: ${s.id}, client_id: ${s.client_id}})">Record Pay</button>
+                      <button class="btn btn-sm btn-secondary" onclick="openModal('renewSubModal', {sub_id: ${s.id}})">Renew</button>
+                      <button class="btn btn-sm btn-secondary" onclick="suspendSub(${s.id})">Suspend</button>
+                      <button class="btn btn-sm btn-danger" onclick="cancelSub(${s.id})">Cancel</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // 7. Payments
+      if (activeTab === "payments") {
+        return `
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Confirmed Manual Payment Receipts (${paymentsList.length})</span>
+              <button class="btn btn-sm" onclick="openModal('recordPayment')">+ Record Manual Payment</button>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+              All payments are verified externally (UPI / Bank Transfer / Cheque) and confirmed manually by vendor staff.
+            </p>
+            <table>
+              <thead><tr><th>Receipt ID</th><th>Client ID</th><th>Amount</th><th>Method</th><th>UTR / Reference</th><th>Date</th><th>Recorded / Reviewed</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                ${paymentsList.map(p => {
+                  const isPending = p.status === 'PENDING';
+                  const isConfirmed = p.status === 'CONFIRMED';
+                  const badgeClass = isConfirmed ? 'badge-active' : isPending ? 'badge-warn' : 'badge-danger';
+                  return `
+                  <tr>
+                    <td><code>PAY-#${p.id}</code></td>
+                    <td>Client #${p.client_id}</td>
+                    <td><strong>₹${(p.amount / 100).toLocaleString('en-IN', {minimumFractionDigits: 2})}</strong></td>
+                    <td>${p.payment_method}</td>
+                    <td><code style="color:#93c5fd;">${p.payment_reference}</code></td>
+                    <td>${p.payment_date}</td>
+                    <td><small>${p.reviewed_by_email || p.recorded_by_email || 'Customer Portal'}</small></td>
+                    <td><span class="badge ${badgeClass}">${p.status}</span></td>
+                    <td>
+                      ${isPending ? `
+                        <button class="btn btn-sm btn-success" onclick="confirmPayment(${p.id})">✓ Confirm</button>
+                        <button class="btn btn-sm btn-danger" onclick="rejectPayment(${p.id})">✗ Reject</button>
+                      ` : `
+                        <span style="color:var(--text-muted); font-size:0.75rem;">${isConfirmed ? 'Verified' : 'Processed'}</span>
+                      `}
+                    </td>
+                  </tr>
+                `}).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // 8. Licenses
+      if (activeTab === "licenses") {
+        return `
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Cryptographically Signed Licenses (${licensesList.length})</span>
+              <button class="btn btn-sm" onclick="openModal('generateLicense')">+ Generate New License</button>
+            </div>
+            <table>
+              <thead><tr><th>License ID</th><th>Client</th><th>Terminals</th><th>Activation</th><th>Expiry</th><th>Signature (Ed25519)</th><th>Actions</th></tr></thead>
+              <tbody>
+                ${licensesList.map(l => `
+                  <tr>
+                    <td><code style="color: #93c5fd;">${l.license_id}</code></td>
+                    <td><strong>${l.client_name}</strong></td>
+                    <td>${l.terminal_count} Counter(s)</td>
+                    <td>${l.activation_date}</td>
+                    <td>${l.expiry_date || 'Perpetual'}</td>
+                    <td><span style="font-family:monospace; font-size: 0.7rem; color: var(--text-muted);">${l.signature.substring(0, 16)}...</span></td>
+                    <td>
+                      <a href="/api/v1/licenses/${l.license_id}/download" target="_blank" class="btn btn-sm btn-secondary" style="text-decoration:none;">Download .json</a>
+                      ${!l.revoked_at ? `<button class="btn btn-sm btn-danger" onclick="revokeLic('${l.license_id}')">Revoke</button>` : `<span class="badge badge-danger">Revoked</span>`}
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // 9. Vendor Users
+      if (activeTab === "users") {
+        return `
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Vendor Portal User Accounts</span>
+              <button class="btn btn-sm" onclick="openModal('newUser')">+ Add Vendor User</button>
+            </div>
+            <table>
+              <thead><tr><th>ID</th><th>Full Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead>
+              <tbody>
+                ${usersList.map(u => `
+                  <tr>
+                    <td>#${u.id}</td>
+                    <td><strong>${u.full_name}</strong></td>
+                    <td>${u.email}</td>
+                    <td><span class="badge badge-trial">${u.role}</span></td>
+                    <td><span class="badge ${u.is_active ? 'badge-active' : 'badge-danger'}">${u.is_active ? 'ACTIVE' : 'INACTIVE'}</span></td>
+                    <td><small>${u.last_login_at || 'Never'}</small></td>
+                    <td>
+                      <button class="btn btn-sm btn-secondary" onclick="toggleUserStatus(${u.id}, ${!u.is_active})">
+                        ${u.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // 10. Audit History
+      if (activeTab === "audit") {
+        return `
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Security & Management Audit History</span>
+            </div>
+            <table>
+              <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Entity</th><th>Entity ID</th><th>IP Address</th></tr></thead>
+              <tbody>
+                ${auditList.map(a => `
+                  <tr>
+                    <td><small>${a.timestamp ? a.timestamp.replace('T', ' ').substring(0, 19) : ''}</small></td>
+                    <td><strong>${a.user_email}</strong></td>
+                    <td><code>${a.action}</code></td>
+                    <td>${a.entity_type}</td>
+                    <td>#${a.entity_id || '-'}</td>
+                    <td><small>${a.ip_address || 'local'}</small></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // 3. Renewal Requests Tab
+      if (activeTab === "renewals") {
+        return `
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">In-App License Renewal Requests (${renewalRequestsList.length})</span>
+              <button class="btn btn-sm btn-secondary" onclick="loadData()">↻ Refresh</button>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th><th>Received</th><th>Client / Store</th><th>Contact Person</th><th>Phone / Email</th>
+                  <th>Plan</th><th>Payment Ref / UTR</th><th>Status</th><th>Email Alert</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${renewalRequestsList.length ? renewalRequestsList.map(r => `
+                  <tr>
+                    <td><code>#${r.id}</code></td>
+                    <td><small>${r.created_at ? r.created_at.replace('T', ' ').substring(0, 16) : ''}</small></td>
+                    <td><strong>${r.store_name}</strong><br/><small style="color:var(--text-muted);">Client #${r.client_id}</small></td>
+                    <td>${r.contact_name}</td>
+                    <td>${r.phone}<br/><small style="color:var(--text-muted);">${r.email}</small></td>
+                    <td><span class="badge badge-trial">${r.requested_plan_code}</span></td>
+                    <td><code>${r.payment_reference || 'None'}</code></td>
+                    <td>
+                      <span class="badge ${r.status === 'APPROVED' ? 'badge-active' : r.status === 'PENDING' ? 'badge-warn' : 'badge-danger'}">
+                        ${r.status}
+                      </span>
+                    </td>
+                    <td>
+                      <small style="color:${r.vendor_notification_sent ? 'var(--success)' : 'var(--text-muted)'};">
+                        ${r.vendor_notification_sent ? '✓ Sent' : (r.vendor_notification_error ? 'Failed' : 'Pending')}
+                      </small>
+                    </td>
+                    <td>
+                      ${r.status === 'PENDING' ? `
+                        <button class="btn btn-sm btn-success" onclick="openApproveRenewalModal(${r.id})">Approve & Issue</button>
+                        <button class="btn btn-sm btn-danger" onclick="rejectRenewal(${r.id})">Reject</button>
+                      ` : r.status === 'APPROVED' ? `
+                        <span style="color:var(--success); font-size:0.75rem; font-weight:600;">✓ Approved</span>
+                      ` : `
+                        <small style="color:var(--danger);">${r.rejection_reason || 'Rejected'}</small>
+                      `}
+                    </td>
+                  </tr>
+                `).join('') : `<tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding:2rem;">No renewal requests submitted yet.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // 11. Settings
+      if (activeTab === "settings") {
+        const sc = settingsData.support_contacts || {};
+        return `
+          <div class="card" style="max-width: 680px;">
+            <div class="card-header">
+              <span class="card-title">Vendor Licensing & Support Settings</span>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1.5rem;">
+              Configure default evaluation trial durations, grace periods, and customer support channels. All updates are validated server-side and recorded in the audit log.
+            </p>
+            <form id="system-settings-form">
+              <h4 style="font-size:0.95rem; margin-bottom:0.75rem; color:#93c5fd;">Evaluation Trial & Grace Period Policies</h4>
+              <label>Default Trial Duration (Days)</label>
+              <div style="display:flex; gap:8px; margin-bottom:4px;">
+                <input id="set-trial-days" type="number" min="1" max="365" value="${settingsData.default_trial_days || 15}" style="flex:1;" required />
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('set-trial-days').value=4">4 Days</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('set-trial-days').value=10">10 Days</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('set-trial-days').value=15">15 Days</button>
+              </div>
+              <small style="color:var(--text-muted); display:block; margin-bottom:14px;">Applies to all newly registered evaluation clients unless manually overridden per client.</small>
+
+              <label>Default Grace Period (Days)</label>
+              <input id="set-grace-days" type="number" min="0" max="90" value="${settingsData.default_grace_days || 7}" required />
+              <small style="color:var(--text-muted); display:block; margin-bottom:20px;">Days allowed after license expiration before commercial POS operations restrict offline.</small>
+
+              <h4 style="font-size:0.95rem; margin-bottom:0.75rem; color:#93c5fd;">Customer Support Contact Channels</h4>
+              <label>Support Phone Number</label>
+              <input id="set-support-phone" type="text" value="${sc.phone || '+91 98765 43210'}" required />
+
+              <label>Support WhatsApp Number</label>
+              <input id="set-support-whatsapp" type="text" value="${sc.whatsapp || '+91 98765 43210'}" required />
+
+              <label>Support Email Address</label>
+              <input id="set-support-email" type="email" value="${sc.email || 'support@apexhealth.local'}" required />
+
+              <label>Vendor Notification Email (Alerts for New Trials & Renewals)</label>
+              <input id="set-vendor-email" type="email" value="${sc.vendor_notification_email || 'vendor@apexhealth.local'}" required />
+              <small style="color:var(--text-muted); display:block; margin-bottom:20px;">Server sends automated email notifications to this address when clients request renewals.</small>
+
+              <button type="submit" class="btn" style="padding:0.6rem 1.2rem;">Save System & Support Settings</button>
+            </form>
+          </div>
+        `;
+      }
+
+      return "";
+    }
+
+    async function viewClientDetails(clientId) {
+      try {
+        selectedClientDetail = await api(`/clients/${clientId}`);
+        openModal("clientDetailsModal");
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function confirmPayment(paymentId) {
+      if (!confirm("Confirm and verify this manual payment? This will extend the client's subscription and issue an updated signed Ed25519 license.")) return;
+      try {
+        await api(`/payments/${paymentId}/confirm`, { method: "POST" });
+        alert("Payment verified! Subscription extended and signed license issued.");
+        await fetchData();
+        render();
+      } catch (err) {
+        alert("Failed to confirm payment: " + err.message);
+      }
+    }
+
+    async function rejectPayment(paymentId) {
+      const reason = prompt("Enter reason for rejection (e.g. UTR not found on bank/UPI statement):");
+      if (!reason) return;
+      try {
+        await api(`/payments/${paymentId}/reject`, {
+          method: "POST",
+          body: JSON.stringify({ reason: reason.trim() })
+        });
+        alert("Payment rejected.");
+        await fetchData();
+        render();
+      } catch (err) {
+        alert("Failed to reject payment: " + err.message);
+      }
+    }
+
+    function openModal(name, data = {}) {
+      activeModal = name;
+      modalData = data;
+      render();
+    }
+
+    function closeModal() {
+      activeModal = null;
+      modalData = {};
+      selectedClientDetail = null;
+      render();
+    }
+
+    function renderModal() {
+      if (!activeModal) return "";
+
+      // 3. Client Details Screen
+      if (activeModal === "clientDetailsModal" && selectedClientDetail) {
+        const c = selectedClientDetail;
+        return `
+          <div class="modal-overlay">
+            <div class="modal-dialog" style="max-width: 680px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                <h3>Client Details: ${c.business_name}</h3>
+                <span class="badge ${c.status === 'ACTIVE' ? 'badge-active' : c.status === 'TRIAL' ? 'badge-trial' : 'badge-danger'}">${c.status}</span>
+              </div>
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:0.85rem; margin-bottom:1.2rem; background:rgba(0,0,0,0.2); padding:12px; border-radius:6px;">
+                <div><strong>Code:</strong> <code>${c.client_code}</code></div>
+                <div><strong>Owner:</strong> ${c.owner_name}</div>
+                <div><strong>Phone:</strong> ${c.phone}</div>
+                <div><strong>Email:</strong> ${c.email}</div>
+                <div><strong>City:</strong> ${c.city}, ${c.state} (${c.postal_code})</div>
+                <div><strong>Drug License:</strong> ${c.retail_drug_license || 'Not provided'}</div>
+              </div>
+              
+              <h4 style="margin-bottom:0.5rem; font-size:0.95rem;">Subscriptions & Trials (${c.subscriptions ? c.subscriptions.length : 0})</h4>
+              <div style="margin-bottom:1rem; font-size:0.82rem;">
+                ${c.subscriptions && c.subscriptions.length ? c.subscriptions.map(s => `
+                  <div style="border-bottom:1px solid var(--surface-border); padding:6px 0; display:flex; justify-content:space-between;">
+                    <span>SUB-#${s.id} (${s.is_trial ? 'Trial' : 'Paid'}) — Ends: ${s.current_period_end}</span>
+                    <span class="badge ${s.status === 'ACTIVE' ? 'badge-active' : 'badge-trial'}">${s.status}</span>
+                  </div>
+                `).join('') : '<span style="color:var(--text-muted);">No subscriptions yet.</span>'}
+              </div>
+
+              <div style="display:flex; justify-content:flex-end; gap:8px;">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Close</button>
+                <button type="button" class="btn btn-secondary" onclick="openModal('startTrial', {client_id: ${c.id}})">Start Trial</button>
+                <button type="button" class="btn" onclick="openModal('generateLicense', {client_id: ${c.id}})">Issue License</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeModal === "newClient") {
+        return `
+          <div class="modal-overlay">
+            <div class="modal-dialog">
+              <h3 style="margin-bottom: 1rem;">Register Pharmacy Client</h3>
+              <form id="modal-client-form">
+                <label>Business / Pharmacy Name *</label>
+                <input id="mc-bname" placeholder="e.g. Apollo Care Pharmacy" required />
+                <label>Owner Name *</label>
+                <input id="mc-owner" placeholder="e.g. Dr. Rajesh Sharma" required />
+                <label>Phone Number *</label>
+                <input id="mc-phone" placeholder="e.g. 9876543210" required />
+                <label>Email Address *</label>
+                <input id="mc-email" type="email" placeholder="e.g. rajesh@apollocare.com" required />
+                <label>Address *</label>
+                <input id="mc-address" placeholder="e.g. Main Market Road" required />
+                <div style="display:flex; gap:8px;">
+                  <div style="flex:1;"><label>City</label><input id="mc-city" value="Jaunpur" required /></div>
+                  <div style="flex:1;"><label>State</label><input id="mc-state" value="Uttar Pradesh" required /></div>
+                  <div style="flex:1;"><label>PIN</label><input id="mc-pin" value="222001" required /></div>
+                </div>
+                <div style="display:flex; justify-content: flex-end; gap:8px; margin-top:1rem;">
+                  <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                  <button type="submit" class="btn">Save Client</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeModal === "startTrial") {
+        return `
+          <div class="modal-overlay">
+            <div class="modal-dialog">
+              <h3 style="margin-bottom: 1rem;">Start Evaluation Trial</h3>
+              <form id="modal-start-trial-form">
+                <label>Client ID *</label>
+                <input id="mst-cid" type="number" value="${modalData.client_id || (clientsList[0] ? clientsList[0].id : '')}" required />
+                <label>Trial Duration (Days)</label>
+                <input id="mst-days" type="number" value="15" min="1" max="180" placeholder="Defaults to system default (15 days)" />
+                <small style="color:var(--text-muted); display:block; margin-bottom:8px;">Leave blank to use system default duration.</small>
+                <label>Notes</label>
+                <input id="mst-notes" placeholder="Evaluation trial started" />
+                <div style="display:flex; justify-content: flex-end; gap:8px; margin-top:1rem;">
+                  <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                  <button type="submit" class="btn">Activate Trial</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeModal === "convertPaid") {
+        return `
+          <div class="modal-overlay">
+            <div class="modal-dialog">
+              <h3 style="margin-bottom: 1rem;">Convert Trial to Paid Subscription</h3>
+              <form id="modal-convert-paid-form">
+                <input id="mcp-subid" type="hidden" value="${modalData.sub_id}" />
+                <label>Select Plan *</label>
+                <select id="mcp-plan" required>
+                  ${plansList.filter(p => p.billing_period !== 'TRIAL').map(p => `
+                    <option value="${p.id}">${p.name} — ₹${(p.price/100)} / ${p.billing_period}</option>
+                  `).join('')}
+                </select>
+                <label>Payment Reference / UTR Number *</label>
+                <input id="mcp-ref" placeholder="e.g. UPI-9812489012" required />
+                <label>Payment Method</label>
+                <select id="mcp-method">
+                  <option value="UPI">UPI Transfer</option>
+                  <option value="NEFT_RTGS">Bank NEFT/RTGS</option>
+                  <option value="CHEQUE">Cheque</option>
+                  <option value="CASH">Cash</option>
+                </select>
+                <label>Amount (in Paise) *</label>
+                <input id="mcp-amt" type="number" value="1500000" required />
+                <div style="display:flex; justify-content: flex-end; gap:8px; margin-top:1rem;">
+                  <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                  <button type="submit" class="btn btn-success">Confirm & Convert</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeModal === "newPaidSub") {
+        return `
+          <div class="modal-overlay">
+            <div class="modal-dialog">
+              <h3 style="margin-bottom: 1rem;">Create Paid Commercial Subscription</h3>
+              <form id="modal-paid-sub-form">
+                <label>Client ID *</label>
+                <input id="mps-cid" type="number" value="${modalData.client_id || (clientsList[0] ? clientsList[0].id : '')}" required />
+                <label>Select Plan *</label>
+                <select id="mps-plan" required>
+                  ${plansList.filter(p => p.billing_period !== 'TRIAL').map(p => `
+                    <option value="${p.id}">${p.name} — ₹${(p.price/100)} / ${p.billing_period}</option>
+                  `).join('')}
+                </select>
+                <label>Payment Reference / UTR Number *</label>
+                <input id="mps-ref" placeholder="e.g. UTR-2026-X812" required />
+                <label>Amount (in Paise) *</label>
+                <input id="mps-amt" type="number" value="1500000" required />
+                <div style="display:flex; justify-content: flex-end; gap:8px; margin-top:1rem;">
+                  <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                  <button type="submit" class="btn">Create Subscription</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeModal === "renewSubModal") {
+        return `
+          <div class="modal-overlay">
+            <div class="modal-dialog">
+              <h3 style="margin-bottom: 1rem;">Renew Commercial Subscription</h3>
+              <form id="modal-renew-form">
+                <input id="mrn-subid" type="hidden" value="${modalData.sub_id}" />
+                <label>Payment Reference / UTR Number *</label>
+                <input id="mrn-ref" placeholder="e.g. UPI-RENEW-8812" required />
+                <label>Amount (in Paise) *</label>
+                <input id="mrn-amt" type="number" value="1500000" required />
+                <label>Notes</label>
+                <input id="mrn-notes" placeholder="Annual renewal payment" />
+                <div style="display:flex; justify-content: flex-end; gap:8px; margin-top:1rem;">
+                  <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                  <button type="submit" class="btn">Confirm Renewal</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeModal === "recordPayment") {
+        return `
+          <div class="modal-overlay">
+            <div class="modal-dialog">
+              <h3 style="margin-bottom: 1rem;">Record Manual Payment Confirmation</h3>
+              <form id="modal-pay-form">
+                <label>Client ID *</label>
+                <input id="mp-cid" type="number" value="${modalData.client_id || (clientsList[0] ? clientsList[0].id : '')}" required />
+                <label>Linked Subscription ID (Optional)</label>
+                <input id="mp-subid" type="number" value="${modalData.sub_id || ''}" />
+                <label>Payment Reference / UTR Number *</label>
+                <input id="mp-ref" placeholder="e.g. UPI-9812489012 or CHQ-1029" required />
+                <label>Amount (in Paise) *</label>
+                <input id="mp-amt" type="number" value="1500000" required />
+                <label>Payment Method</label>
+                <select id="mp-method">
+                  <option value="UPI">UPI Transfer</option>
+                  <option value="NEFT_RTGS">Bank NEFT/RTGS</option>
+                  <option value="CHEQUE">Cheque</option>
+                  <option value="CASH">Cash</option>
+                </select>
+                <label>Notes</label>
+                <input id="mp-notes" placeholder="e.g. Confirmed in Axis Bank account" />
+                <div style="display:flex; justify-content: flex-end; gap:8px; margin-top:1rem;">
+                  <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                  <button type="submit" class="btn">Confirm Payment</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeModal === "generateLicense") {
+        return `
+          <div class="modal-overlay">
+            <div class="modal-dialog">
+              <h3 style="margin-bottom: 1rem;">Issue Ed25519 Signed License</h3>
+              <form id="modal-lic-form">
+                <label>Client ID *</label>
+                <input id="ml-cid" type="number" value="${modalData.client_id || (clientsList[0] ? clientsList[0].id : '')}" required />
+                <label>Terminal Workstations Count *</label>
+                <input id="ml-terminals" type="number" value="5" min="1" max="50" required />
+                <label>Activation Date</label>
+                <input id="ml-act" type="date" value="${new Date().toISOString().split('T')[0]}" required />
+                <label>Expiry Date</label>
+                <input id="ml-exp" type="date" value="${new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0]}" />
+                <label>Edition</label>
+                <select id="ml-edition">
+                  <option value="COMMERCIAL">COMMERCIAL (Full)</option>
+                  <option value="TRIAL">TRIAL (Evaluation)</option>
+                </select>
+                <div style="display:flex; justify-content: flex-end; gap:8px; margin-top:1rem;">
+                  <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                  <button type="submit" class="btn">Generate & Sign License</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeModal === "newUser") {
+        return `
+          <div class="modal-overlay">
+            <div class="modal-dialog">
+              <h3 style="margin-bottom: 1rem;">Add Vendor User Account</h3>
+              <form id="modal-user-form">
+                <label>Full Name *</label>
+                <input id="mu-name" placeholder="e.g. Rohan Sharma" required />
+                <label>Email Address *</label>
+                <input id="mu-email" type="email" placeholder="e.g. rohan@apexhealth.local" required />
+                <label>Temporary Password *</label>
+                <input id="mu-pass" type="password" required />
+                <label>Role *</label>
+                <select id="mu-role">
+                  <option value="SUPPORT">SUPPORT</option>
+                  <option value="ADMIN">ADMIN</option>
+                  <option value="READ_ONLY">READ_ONLY</option>
+                </select>
+                <div style="display:flex; justify-content: flex-end; gap:8px; margin-top:1rem;">
+                  <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                  <button type="submit" class="btn">Create User</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeModal === "approveRenewalModal" && modalData.renewal) {
+        const r = modalData.renewal;
+        return `
+          <div class="modal-overlay">
+            <div class="modal-dialog" style="max-width:560px;">
+              <h3 style="margin-bottom:1rem;">Approve Renewal Request #${r.id}</h3>
+              <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+                Approving this request records payment verification, extends the client subscription starting from the later of today or current expiry, and generates a renewed Ed25519 signed license.
+              </p>
+              <form id="modal-approve-renewal-form">
+                <input type="hidden" id="mar-rid" value="${r.id}" />
+                <label>Pharmacy Store & Contact</label>
+                <input value="${r.store_name} (${r.contact_name} • ${r.phone})" disabled />
+
+                <label>Commercial Plan *</label>
+                <select id="mar-plan" required>
+                  ${(plansList || []).filter(p => p.plan_code !== 'TRIAL').map(p => `
+                    <option value="${p.id}" ${p.plan_code === r.requested_plan_code ? 'selected' : ''}>
+                      ${p.name} (${p.billing_period} — ₹${(p.price/100).toFixed(2)}) [${p.maximum_terminals} Counter(s)]
+                    </option>
+                  `).join('')}
+                </select>
+
+                <label>Payment Reference / UTR Number *</label>
+                <input id="mar-ref" value="${r.payment_reference || 'UTR-' + Date.now().toString().slice(-6)}" required />
+
+                <label>Payment Amount (in Paise) *</label>
+                <input id="mar-amt" type="number" value="${r.payment_amount || 59900}" required />
+
+                <label>Approval Verification Notes</label>
+                <textarea id="mar-notes" rows="2" placeholder="e.g. Verified payment in bank/UPI portal. Renewed by admin."></textarea>
+
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:1.2rem;">
+                  <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                  <button type="submit" class="btn btn-success">Approve Renewal & Issue License</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      }
+
+      return "";
+    }
+
+    function openApproveRenewalModal(requestId) {
+      const renewal = (renewalRequestsList || []).find(r => r.id === requestId);
+      if (!renewal) {
+        alert("Renewal request not found.");
+        return;
+      }
+      openModal("approveRenewalModal", { renewal });
+    }
+
+    async function rejectRenewal(requestId) {
+      const reason = prompt("Enter reason for rejecting renewal request (e.g. Payment UTR reference not verified):");
+      if (!reason || !reason.trim()) return;
+      try {
+        await api(`/renewal-requests/${requestId}/reject`, {
+          method: "POST",
+          body: JSON.stringify({ reason: reason.trim() })
+        });
+        alert("Renewal request rejected.");
+        loadData();
+      } catch (err) { alert("Rejection failed: " + err.message); }
+    }
+
+    // Modal submit listeners
+    document.addEventListener("submit", async (e) => {
+      if (e.target.id === "modal-client-form") {
+        e.preventDefault();
+        try {
+          await api("/clients", {
+            method: "POST",
+            body: JSON.stringify({
+              business_name: document.getElementById("mc-bname").value,
+              owner_name: document.getElementById("mc-owner").value,
+              phone: document.getElementById("mc-phone").value,
+              email: document.getElementById("mc-email").value,
+              address: document.getElementById("mc-address").value,
+              city: document.getElementById("mc-city").value,
+              state: document.getElementById("mc-state").value,
+              postal_code: document.getElementById("mc-pin").value,
+            })
+          });
+          closeModal();
+          loadData();
+        } catch (err) { alert(err.message); }
+      }
+
+      if (e.target.id === "modal-start-trial-form") {
+        e.preventDefault();
+        try {
+          const daysVal = document.getElementById("mst-days").value;
+          await api("/subscriptions/start-trial", {
+            method: "POST",
+            body: JSON.stringify({
+              client_id: parseInt(document.getElementById("mst-cid").value),
+              trial_days: daysVal ? parseInt(daysVal) : null,
+              notes: document.getElementById("mst-notes").value || null,
+            })
+          });
+          alert("Evaluation trial activated.");
+          closeModal();
+          setTab("trials");
+        } catch (err) { alert(err.message); }
+      }
+
+      if (e.target.id === "modal-convert-paid-form") {
+        e.preventDefault();
+        try {
+          const subId = document.getElementById("mcp-subid").value;
+          await api(`/subscriptions/${subId}/convert-to-paid`, {
+            method: "POST",
+            body: JSON.stringify({
+              plan_id: parseInt(document.getElementById("mcp-plan").value),
+              payment_reference: document.getElementById("mcp-ref").value,
+              payment_method: document.getElementById("mcp-method").value,
+              amount: parseInt(document.getElementById("mcp-amt").value),
+            })
+          });
+          alert("Trial successfully converted to paid commercial subscription!");
+          closeModal();
+          setTab("subscriptions");
+        } catch (err) { alert(err.message); }
+      }
+
+      if (e.target.id === "modal-paid-sub-form") {
+        e.preventDefault();
+        try {
+          await api("/subscriptions/paid", {
+            method: "POST",
+            body: JSON.stringify({
+              client_id: parseInt(document.getElementById("mps-cid").value),
+              plan_id: parseInt(document.getElementById("mps-plan").value),
+              payment_reference: document.getElementById("mps-ref").value,
+              amount: parseInt(document.getElementById("mps-amt").value),
+            })
+          });
+          alert("Paid subscription created successfully.");
+          closeModal();
+          setTab("subscriptions");
+        } catch (err) { alert(err.message); }
+      }
+
+      if (e.target.id === "modal-renew-form") {
+        e.preventDefault();
+        try {
+          const subId = document.getElementById("mrn-subid").value;
+          await api(`/subscriptions/${subId}/renew`, {
+            method: "POST",
+            body: JSON.stringify({
+              payment_reference: document.getElementById("mrn-ref").value,
+              amount: parseInt(document.getElementById("mrn-amt").value),
+              notes: document.getElementById("mrn-notes").value,
+            })
+          });
+          alert("Subscription renewed successfully.");
+          closeModal();
+          loadData();
+        } catch (err) { alert(err.message); }
+      }
+
+      if (e.target.id === "modal-pay-form") {
+        e.preventDefault();
+        try {
+          const subIdVal = document.getElementById("mp-subid").value;
+          await api("/payments", {
+            method: "POST",
+            body: JSON.stringify({
+              client_id: parseInt(document.getElementById("mp-cid").value),
+              subscription_id: subIdVal ? parseInt(subIdVal) : null,
+              payment_reference: document.getElementById("mp-ref").value,
+              amount: parseInt(document.getElementById("mp-amt").value),
+              payment_method: document.getElementById("mp-method").value,
+              notes: document.getElementById("mp-notes").value,
+            })
+          });
+          alert("Manual payment recorded successfully.");
+          closeModal();
+          setTab("payments");
+        } catch (err) { alert(err.message); }
+      }
+
+      if (e.target.id === "modal-lic-form") {
+        e.preventDefault();
+        try {
+          const res = await api("/licenses/generate", {
+            method: "POST",
+            body: JSON.stringify({
+              client_id: parseInt(document.getElementById("ml-cid").value),
+              terminal_count: parseInt(document.getElementById("ml-terminals").value),
+              activation_date: document.getElementById("ml-act").value,
+              expiry_date: document.getElementById("ml-exp").value || null,
+              edition: document.getElementById("ml-edition").value,
+            })
+          });
+          alert(`License ${res.license_id} generated successfully!`);
+          closeModal();
+          setTab("licenses");
+        } catch (err) { alert(err.message); }
+      }
+
+      if (e.target.id === "modal-user-form") {
+        e.preventDefault();
+        try {
+          await api("/users", {
+            method: "POST",
+            body: JSON.stringify({
+              full_name: document.getElementById("mu-name").value,
+              email: document.getElementById("mu-email").value,
+              password: document.getElementById("mu-pass").value,
+              role: document.getElementById("mu-role").value,
+            })
+          });
+          alert("Vendor user created.");
+          closeModal();
+          loadData();
+        } catch (err) { alert(err.message); }
+      }
+
+      if (e.target.id === "modal-approve-renewal-form") {
+        e.preventDefault();
+        try {
+          const reqId = document.getElementById("mar-rid").value;
+          const planId = parseInt(document.getElementById("mar-plan").value);
+          const paymentRef = document.getElementById("mar-ref").value;
+          const amount = parseInt(document.getElementById("mar-amt").value);
+          const notes = document.getElementById("mar-notes").value || null;
+
+          await api(`/renewal-requests/${reqId}/approve`, {
+            method: "POST",
+            body: JSON.stringify({
+              plan_id: planId,
+              payment_reference: paymentRef,
+              amount: amount,
+              notes: notes,
+            })
+          });
+          alert("Renewal request approved successfully! Renewed Ed25519 signed license generated.");
+          closeModal();
+          loadData();
+        } catch (err) { alert("Failed to approve renewal: " + err.message); }
+      }
+
+      if (e.target.id === "system-settings-form") {
+        e.preventDefault();
+        try {
+          const trialDays = parseInt(document.getElementById("set-trial-days").value);
+          const graceDays = parseInt(document.getElementById("set-grace-days").value);
+          await api("/settings/trial-duration", {
+            method: "PUT",
+            body: JSON.stringify({
+              default_trial_days: trialDays,
+              default_grace_days: graceDays,
+            })
+          });
+
+          await api("/settings/support-contacts", {
+            method: "PUT",
+            body: JSON.stringify({
+              phone: document.getElementById("set-support-phone").value,
+              whatsapp: document.getElementById("set-support-whatsapp").value,
+              email: document.getElementById("set-support-email").value,
+              vendor_notification_email: document.getElementById("set-vendor-email").value,
+            })
+          });
+
+          alert("System default trial settings and customer support contacts updated successfully!");
+          loadData();
+        } catch (err) { alert(err.message); }
+      }
+    });
+
+    async function suspendSub(id) {
+      if (!confirm(`Suspend subscription #${id}?`)) return;
+      try {
+        await api(`/subscriptions/${id}/suspend`, { method: "POST" });
+        alert("Subscription suspended.");
+        loadData();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function cancelSub(id) {
+      if (!confirm(`Cancel subscription #${id}?`)) return;
+      try {
+        await api(`/subscriptions/${id}/cancel`, { method: "POST" });
+        alert("Subscription cancelled.");
+        loadData();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function revokeLic(id) {
+      if (!confirm(`Revoke license ${id}?`)) return;
+      try {
+        await api(`/licenses/${id}/revoke`, { method: "POST" });
+        alert("License revoked.");
+        loadData();
+      } catch (err) { alert(err.message); }
+    }
+
+    async function toggleUserStatus(userId, makeActive) {
+      try {
+        await api(`/users/${userId}/status`, {
+          method: "PUT",
+          body: JSON.stringify({ is_active: makeActive })
+        });
+        loadData();
+      } catch (err) { alert(err.message); }
+    }
+
+    init();
+  </script>
+</body>
+</html>

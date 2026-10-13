@@ -1,0 +1,30 @@
+{
+  "name": "pharmacy-offline-pos",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline-first pharmacy management & POS system inspired by MARG ERP 9+",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "typecheck": "npm --workspace=packages/api-contracts run typecheck",
+    "build:contracts": "npm --workspace=packages/api-contracts run build",
+    "build:web": "npm --workspace=apps/web run build",
+    "dev:web": "npm --workspace=apps/web run dev",
+    "build:portal": "npm --workspace=apps/frontend run build",
+    "dev:portal": "npm --workspace=apps/frontend run dev",
+    "typecheck:portal": "npm --workspace=apps/frontend run typecheck",
+    "test:portal": "npm --workspace=apps/frontend run test"
+  },
+  "keywords": [
+    "pharmacy",
+    "pos",
+    "offline-first",
+    "inventory",
+    "fefo",
+    "marg-erp"
+  ],
+  "author": "",
+  "license": "UNLICENSED"
+}

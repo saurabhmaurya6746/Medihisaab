@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Customer Account & Licensing Portal — MediHisaab</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+
+    /* Header */
+    .app-header { background: var(--surface); border-bottom: 1px solid var(--surface-border); padding: 0.85rem 1.75rem; display: flex; justify-content: space-between; align-items: center; }
+    .brand { display: flex; align-items: center; gap: 0.75rem; font-weight: 700; font-size: 1.15rem; color: #fff; text-decoration: none; }
+    .brand-icon { width: 32px; height: 32px; background: var(--primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem; }
+    .brand-badge { background: #3b82f6; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+    .user-pill { display: flex; align-items: center; gap: 1rem; }
+    .user-info { text-align: right; font-size: 0.85rem; }
+    .user-name { font-weight: 600; color: #fff; }
+    .user-code { font-size: 0.75rem; color: var(--text-muted); font-family: monospace; }
+
+    /* Main Container */
+    .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+
+    /* Cards */
+    .card { background: var(--surface); border: 1px solid var(--surface-border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.75rem; }
+    .card-title { font-size: 1.15rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+
+    /* Grid Layouts */
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+
+    /* Metric Box */
+    .metric-box { background: rgba(15,23,42,0.6); border: 1px solid var(--surface-border); border-radius: 6px; padding: 1rem; }
+    .metric-lbl { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.25rem; }
+    .metric-val { font-size: 1.35rem; font-weight: 700; color: #60a5fa; }
+    .metric-sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+    /* Badges */
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .badge-active { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-trial { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .badge-warn { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    /* Buttons */
+    .btn { background: var(--primary); color: white; border: none; padding: 0.55rem 1.15rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; transition: background 0.15s; }
+    .btn:hover { background: var(--primary-hover); }
+    .btn-secondary { background: #475569; }
+    .btn-secondary:hover { background: #334155; }
+    .btn-success { background: #059669; }
+    .btn-success:hover { background: #047857; }
+    .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+    .btn-lg { padding: 0.75rem 1.75rem; font-size: 1rem; }
+
+    /* Forms */
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-size: 0.825rem; font-weight: 500; color: #cbd5e1; margin-bottom: 0.35rem; }
+    input, select, textarea { background: #0f172a; border: 1px solid var(--surface-border); color: white; padding: 0.55rem 0.75rem; border-radius: 6px; font-size: 0.875rem; width: 100%; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
+    .form-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem; }
+    th { text-align: left; padding: 0.65rem 0.75rem; background: rgba(0,0,0,0.3); color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--surface-border); }
+    td { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--surface-border); color: #cbd5e1; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* Banner Alerts */
+    .alert { padding: 0.85rem 1.15rem; border-radius: 6px; margin-bottom: 1.25rem; font-size: 0.875rem; display: flex; align-items: flex-start; gap: 0.75rem; }
+    .alert-info { background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; }
+    .alert-success { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #6ee7b7; }
+    .alert-warning { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #fde047; }
+    .alert-danger { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; }
+
+    /* Auth Views */
+    .auth-container { max-width: 440px; margin: 3.5rem auto; background: var(--surface); border: 1px solid var(--surface-border); border-radius: 8px; padding: 2rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); }
+    .auth-tabs { display: flex; margin-bottom: 1.5rem; border-bottom: 1px solid var(--surface-border); }
+    .auth-tab { flex: 1; text-align: center; padding: 0.65rem; background: transparent; border: none; color: var(--text-muted); font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; font-size: 0.9rem; }
+    .auth-tab.active { color: #60a5fa; border-bottom-color: var(--primary); }
+    
+    .plan-card { border: 1px solid var(--surface-border); border-radius: 6px; padding: 1rem; margin-bottom: 0.75rem; background: rgba(15,23,42,0.4); cursor: pointer; transition: all 0.15s; }
+    .plan-card:hover, .plan-card.selected { border-color: var(--primary); background: rgba(37,99,235,0.08); }
+    .plan-header { display: flex; justify-content: space-between; align-items: baseline; }
+    .plan-title { font-weight: 600; font-size: 0.95rem; color: #fff; }
+    .plan-price { font-weight: 700; color: #60a5fa; font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script>
+    const API_BASE = "/api/v1";
+    let token = localStorage.getItem("client_token") || null;
+    let authMode = "signup"; // "signup" or "login"
+    let clientDashboard = null;
+    let availablePlans = [];
+    let availableDownloads = [];
+    let errorMsg = null;
+    let successMsg = null;
+    let selectedRenewalPlanId = null;
+
+    async function api(path, options = {}) {
+      const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json.detail || json.message || "An error occurred with the request.");
+        }
+        return json.data !== undefined ? json.data : json;
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    async function loadDashboard() {
+      try {
+        const [dash, plans, downloads] = await Promise.all([
+          api("/client/dashboard"),
+          api("/client/plans"),
+          api("/client/downloads"),
+        ]);
+        clientDashboard = dash;
+        availablePlans = plans;
+        availableDownloads = downloads;
+        if (plans && plans.length > 0 && !selectedRenewalPlanId) {
+          selectedRenewalPlanId = plans[0].id;
+        }
+        render();
+      } catch (err) {
+        if (err.message.includes("401") || err.message.includes("expired") || err.message.includes("credentials")) {
+          token = null;
+          localStorage.removeItem("client_token");
+        } else {
+          errorMsg = err.message;
+        }
+        render();
+      }
+    }
+
+    async function handleSignup(e) {
+      e.preventDefault();
+      errorMsg = null;
+      successMsg = null;
+      const form = e.target;
+      const payload = {
+        pharmacy_name: form.pharmacy_name.value.trim(),
+        contact_person: form.contact_person.value.trim(),
+        phone: form.phone.value.trim(),
+        email: form.email.value.trim(),
+        password: form.password.value,
+      };
+
+      try {
+        const res = await api("/client/auth/signup", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        token = res.access_token;
+        localStorage.setItem("client_token", token);
+        successMsg = "Account created successfully! Your 15-day evaluation trial is active.";
+        await loadDashboard();
+      } catch (err) {
+        errorMsg = err.message;
+        render();
+      }
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      errorMsg = null;
+      successMsg = null;
+      const form = e.target;
+      const payload = {
+        email: form.email.value.trim(),
+        password: form.password.value,
+      };
+
+      try {
+        const res = await api("/client/auth/login", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        token = res.access_token;
+        localStorage.setItem("client_token", token);
+        successMsg = "Logged in successfully.";
+        await loadDashboard();
+      } catch (err) {
+        errorMsg = err.message;
+        render();
+      }
+    }
+
+    function handleLogout() {
+      token = null;
+      clientDashboard = null;
+      localStorage.removeItem("client_token");
+      render();
+    }
+
+    async function handlePaymentSubmit(e) {
+      e.preventDefault();
+      errorMsg = null;
+      successMsg = null;
+      const form = e.target;
+      const plan = availablePlans.find(p => p.id === parseInt(form.plan_id.value));
+      const payload = {
+        plan_id: parseInt(form.plan_id.value),
+        amount: parseInt(form.amount.value),
+        payment_reference: form.payment_reference.value.trim(),
+        payment_method: form.payment_method.value,
+        notes: form.notes.value.trim() || undefined,
+      };
+
+      try {
+        await api("/client/payments/submit", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        successMsg = "Payment reference submitted successfully. It will be verified by the accounts team.";
+        form.reset();
+        await loadDashboard();
+      } catch (err) {
+        errorMsg = err.message;
+        render();
+      }
+    }
+
+    function downloadLicenseFile() {
+      if (!token) return;
+      window.location.href = `${API_BASE}/client/license/download?access_token=${token}`;
+      // Fallback direct fetch blob
+      fetch(`${API_BASE}/client/license/download`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      })
+      .then(res => res.blob())
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const filename = (clientDashboard && clientDashboard.active_license) 
+          ? `${clientDashboard.active_license.license_id}.json` 
+          : "license.json";
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      })
+      .catch(err => alert("Error downloading license: " + err.message));
+    }
+
+    function renderHeader() {
+      return `
+        <header class="app-header">
+          <div style="display:flex; align-items:center; gap:1.25rem;">
+            <a href="/client" class="brand">
+              <div class="brand-icon">+</div>
+              <div>MediHisaab <span class="brand-badge">Client Portal</span></div>
+            </a>
+          </div>
+          <div>
+            ${token && clientDashboard ? `
+              <div class="user-pill">
+                <div class="user-info">
+                  <div class="user-name">${clientDashboard.client.business_name}</div>
+                  <div class="user-code">${clientDashboard.client.client_code} • ${clientDashboard.client.email}</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="handleLogout()">Sign Out</button>
+              </div>
+            ` : `
+              <a href="/vendor" class="btn btn-secondary btn-sm" style="font-size:0.75rem;">Vendor Admin</a>
+            `}
+          </div>
+        </header>
+      `;
+    }
+
+    function renderAuthView() {
+      return `
+        ${renderHeader()}
+        <div class="container">
+          <div class="auth-container">
+            <div style="text-align:center; margin-bottom:1.5rem;">
+              <h2 style="font-size:1.45rem; font-weight:700; color:#fff; margin-bottom:0.35rem;">Customer Account</h2>
+              <p style="font-size:0.85rem; color:var(--text-muted);">Manage evaluation trials, license keys, and monthly renewals.</p>
+            </div>
+
+            ${errorMsg ? `<div class="alert alert-danger">${errorMsg}</div>` : ""}
+            ${successMsg ? `<div class="alert alert-success">${successMsg}</div>` : ""}
+
+            <div class="auth-tabs">
+              <button class="auth-tab ${authMode === 'signup' ? 'active' : ''}" onclick="authMode='signup'; render();">Create Account (15-Day Trial)</button>
+              <button class="auth-tab ${authMode === 'login' ? 'active' : ''}" onclick="authMode='login'; render();">Sign In</button>
+            </div>
+
+            ${authMode === 'signup' ? `
+              <form onsubmit="handleSignup(event)">
+                <div class="form-group">
+                  <label for="pharmacy_name">Pharmacy / Store Name *</label>
+                  <input id="pharmacy_name" name="pharmacy_name" required placeholder="e.g. Apollo Care Pharmacy" />
+                </div>
+                <div class="form-group">
+                  <label for="contact_person">Owner / Pharmacist Name *</label>
+                  <input id="contact_person" name="contact_person" required placeholder="e.g. Dr. Rajesh Kumar" />
+                </div>
+                <div class="form-group">
+                  <label for="phone">Contact Phone Number *</label>
+                  <input id="phone" name="phone" required placeholder="e.g. 9876543210" />
+                </div>
+                <div class="form-group">
+                  <label for="email">Account Email Address *</label>
+                  <input id="email" type="email" name="email" required placeholder="name@pharmacy.com" />
+                </div>
+                <div class="form-group">
+                  <label for="password">Password (min 8 characters) *</label>
+                  <input id="password" type="password" name="password" minlength="8" required />
+                </div>
+
+                <div style="background:rgba(37,99,235,0.1); border:1px solid rgba(37,99,235,0.25); border-radius:6px; padding:0.75rem; margin-bottom:1.25rem; font-size:0.8rem; color:#93c5fd;">
+                  ✓ Instant 15-day evaluation trial included<br>
+                  ✓ No credit card or advance payment required<br>
+                  ✓ 100% offline data sovereignty guaranteed
+                </div>
+
+                <button type="submit" class="btn btn-lg" style="width:100%; justify-content:center;">Start 15-Day Free Trial</button>
+              </form>
+            ` : `
+              <form onsubmit="handleLogin(event)">
+                <div class="form-group">
+                  <label for="login_email">Registered Email Address</label>
+                  <input id="login_email" type="email" name="email" required placeholder="name@pharmacy.com" />
+                </div>
+                <div class="form-group">
+                  <label for="login_password">Password</label>
+                  <input id="login_password" type="password" name="password" required />
+                </div>
+
+                <button type="submit" class="btn btn-lg" style="width:100%; justify-content:center; margin-top:0.5rem;">Sign In to Portal</button>
+              </form>
+            `}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDashboardView() {
+      const d = clientDashboard;
+      const isTrial = d.status === "TRIALING" || (d.subscription && d.subscription.is_trial);
+      const isPastDue = d.status === "PAST_DUE" || d.grace_period_active;
+      const isExpired = d.status === "EXPIRED";
+
+      let statusBadge = `<span class="badge badge-active">ACTIVE COMMERCIAL</span>`;
+      if (isTrial) statusBadge = `<span class="badge badge-trial">EVALUATION TRIAL</span>`;
+      if (isPastDue) statusBadge = `<span class="badge badge-warn">GRACE PERIOD</span>`;
+      if (isExpired) statusBadge = `<span class="badge badge-danger">EXPIRED</span>`;
+
+      return `
+        ${renderHeader()}
+        <div class="container">
+          ${errorMsg ? `<div class="alert alert-danger">${errorMsg}</div>` : ""}
+          ${successMsg ? `<div class="alert alert-success">${successMsg}</div>` : ""}
+
+          <!-- 1. Status Overview Banner -->
+          <div class="card" style="border-left: 4px solid ${isExpired ? 'var(--danger)' : isPastDue ? 'var(--warning)' : 'var(--primary)'};">
+            <div class="card-header">
+              <div class="card-title">
+                <span>Subscription Status:</span>
+                ${statusBadge}
+              </div>
+              <div style="font-size:0.8rem; color:var(--text-muted);">
+                Client Code: <strong style="color:#fff; font-family:monospace;">${d.client.client_code}</strong>
+              </div>
+            </div>
+
+            <div class="grid-3">
+              <div class="metric-box">
+                <div class="metric-lbl">Days Remaining</div>
+                <div class="metric-val" style="color: ${d.days_remaining <= 3 ? 'var(--danger)' : d.days_remaining <= 7 ? 'var(--warning)' : '#60a5fa'};">
+                  ${d.days_remaining !== null ? `${d.days_remaining} Days` : 'Perpetual'}
+                </div>
+                <div class="metric-sub">${isPastDue ? 'Grace period window' : isTrial ? '15-day free evaluation' : 'Commercial period'}</div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-lbl">Active Plan</div>
+                <div class="metric-val" style="font-size:1.15rem; color:#fff;">
+                  ${d.subscription && d.subscription.plan ? d.subscription.plan.name : (isTrial ? '15-Day Trial' : 'Commercial Plan')}
+                </div>
+                <div class="metric-sub">${d.subscription ? `Expires: ${d.subscription.current_period_end}` : 'N/A'}</div>
+              </div>
+
+              <div class="metric-box">
+                <div class="metric-lbl">Allowed Billing Terminals</div>
+                <div class="metric-val" style="font-size:1.35rem; color:#34d399;">
+                  ${d.maximum_terminals} Counter(s)
+                </div>
+                <div class="metric-sub">Multi-Counter LAN mode support</div>
+              </div>
+            </div>
+
+            <!-- Offline Notice & Data Guarantee -->
+            <div style="margin-top:1.25rem; padding:0.75rem 1rem; background:rgba(0,0,0,0.25); border-radius:6px; font-size:0.825rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                🔒 <strong>Offline Data Guarantee:</strong> Your sales, stock, and patient records reside 100% locally in SQLite. Subscription expiry never deletes, encrypts, or wipes your pharmacy database.
+              </div>
+              <div style="font-size:0.75rem; white-space:nowrap; margin-left:1rem;">
+                Last Refreshed: ${d.last_refreshed}
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <!-- 2. Software Download & License Area -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">1. Software & License Activation</h3>
+              </div>
+
+              <p style="font-size:0.875rem; color:var(--text-muted); margin-bottom:1rem;">
+                Download the Windows desktop application and your cryptographic license token:
+              </p>
+
+              <div style="display:flex; flex-direction:column; gap:0.85rem;">
+                <div style="background:rgba(15,23,42,0.7); border:1px solid var(--surface-border); border-radius:6px; padding:1rem; display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                    <div style="font-weight:600; color:#fff;">MediHisaab Windows Installer</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">Version 1.0.0 • 50.4 MB • Windows 10 / 11 (64-bit)</div>
+                  </div>
+                  <a href="/MediHisaab-Setup-1.0.0.exe" class="btn btn-sm">Download Setup</a>
+                </div>
+
+                <div style="background:rgba(15,23,42,0.7); border:1px solid var(--surface-border); border-radius:6px; padding:1rem; display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                    <div style="font-weight:600; color:#fff;">
+                      Signed License Token (.json)
+                    </div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">
+                      ${d.active_license ? `${d.active_license.license_id} • Ed25519 Signed` : 'No active license'}
+                    </div>
+                  </div>
+                  <button class="btn btn-success btn-sm" onclick="downloadLicenseFile()">Download License</button>
+                </div>
+              </div>
+
+              <div style="margin-top:1.25rem; border-top:1px solid var(--surface-border); padding-top:1rem;">
+                <div style="font-size:0.825rem; font-weight:600; color:#cbd5e1; margin-bottom:0.5rem;">How to Activate in POS:</div>
+                <ol style="font-size:0.8rem; color:var(--text-muted); padding-left:1.25rem; line-height:1.6;">
+                  <li>Open <strong>MediHisaab</strong> on your Windows desktop.</li>
+                  <li>Click <strong>Settings (Gear Icon)</strong> in top bar &gt; Select <strong>License</strong> tab.</li>
+                  <li>Click <strong>Select License File (.json)</strong> and choose your downloaded file.</li>
+                  <li>Your system immediately activates offline with zero cloud dependency!</li>
+                </ol>
+              </div>
+            </div>
+
+            <!-- 3. Monthly Renewal & Payments Area -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">2. Subscription Renewal</h3>
+              </div>
+
+              <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+                Select a commercial plan and submit your bank / UPI payment reference:
+              </p>
+
+              <form onsubmit="handlePaymentSubmit(event)">
+                <div class="form-group">
+                  <label for="renewal_plan_id">Select Renewal Plan</label>
+                  <select id="renewal_plan_id" name="plan_id" required onchange="
+                    const p = availablePlans.find(x => x.id === parseInt(this.value));
+                    if (p) {
+                      document.getElementById('plan_amount').value = Math.round(p.price / 100);
+                    }
+                  ">
+                    ${availablePlans.map((p, idx) => `
+                      <option value="${p.id}" ${idx === 0 ? 'selected' : ''}>
+                        ${p.name} — ₹${(p.price / 100).toLocaleString('en-IN')}/${p.billing_period.toLowerCase()} (${p.maximum_terminals} counters)
+                      </option>
+                    `).join('')}
+                  </select>
+                </div>
+
+                <div class="grid-2" style="gap:0.75rem;">
+                  <div class="form-group">
+                    <label for="plan_amount">Amount Paid (₹) *</label>
+                    <input id="plan_amount" name="amount" type="number" required value="${availablePlans[0] ? Math.round(availablePlans[0].price / 100) : 599}" />
+                  </div>
+                  <div class="form-group">
+                    <label for="payment_method">Payment Method *</label>
+                    <select id="payment_method" name="payment_method" required>
+                      <option value="UPI">UPI Transfer / QR</option>
+                      <option value="NEFT_RTGS">NEFT / RTGS Bank Transfer</option>
+                      <option value="CHEQUE">Cheque</option>
+                      <option value="CASH">Cash / Direct Deposit</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="payment_reference">Transaction Reference / UTR Number *</label>
+                  <input id="payment_reference" name="payment_reference" required placeholder="e.g. UPI/981248901234 or UTR1029384" />
+                  <div class="form-hint">Enter the 12-digit UPI UTR or bank transaction reference.</div>
+                </div>
+
+                <div class="form-group">
+                  <label for="payment_notes">Notes (Optional)</label>
+                  <input id="payment_notes" name="notes" placeholder="e.g. Renewed for Main Branch counter" />
+                </div>
+
+                <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:6px; padding:0.65rem 0.85rem; font-size:0.775rem; color:#fde047; margin-bottom:1rem;">
+                  ℹ️ Submitted payments remain <strong>PENDING REVIEW</strong> until vendor verification. Only vendor-authorized confirmation activates or renews your paid plan and issues your updated license.
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Submit Payment for Review</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- 4. Payment History Table -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Payment & Renewal History</h3>
+            </div>
+
+            ${d.recent_payments && d.recent_payments.length > 0 ? `
+              <div style="overflow-x:auto;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Reference / UTR</th>
+                      <th>Method</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Notes / Verification</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${d.recent_payments.map(p => {
+                      const isPending = p.status === "PENDING";
+                      const isConfirmed = p.status === "CONFIRMED";
+                      const badgeClass = isConfirmed ? 'badge-active' : isPending ? 'badge-warn' : 'badge-danger';
+                      return `
+                        <tr>
+                          <td>${p.payment_date}</td>
+                          <td style="font-family:monospace; font-weight:600;">${p.payment_reference}</td>
+                          <td>${p.payment_method}</td>
+                          <td style="font-weight:600; color:#60a5fa;">₹${(p.amount / 100).toLocaleString('en-IN')}</td>
+                          <td><span class="badge ${badgeClass}">${p.status}</span></td>
+                          <td style="font-size:0.75rem; color:var(--text-muted);">
+                            ${p.rejection_reason ? `<span style="color:#f87171;">Rejected: ${p.rejection_reason}</span>` : (p.notes || '—')}
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            ` : `
+              <div style="text-align:center; padding:1.5rem; color:var(--text-muted); font-size:0.85rem;">
+                No payments submitted yet. Your 15-day evaluation trial is currently active.
+              </div>
+            `}
+          </div>
+        </div>
+      `;
+    }
+
+    function render() {
+      const app = document.getElementById("app");
+      if (!token) {
+        app.innerHTML = renderAuthView();
+      } else if (!clientDashboard) {
+        app.innerHTML = `
+          ${renderHeader()}
+          <div class="container" style="text-align:center; padding:4rem;">
+            <div style="font-size:1.1rem; color:var(--text-muted);">Loading customer dashboard...</div>
+          </div>
+        `;
+      } else {
+        app.innerHTML = renderDashboardView();
+      }
+    }
+
+    // Initialize
+    if (token) {
+      loadDashboard();
+    } else {
+      render();
+    }
+  </script>
+</body>
+</html>

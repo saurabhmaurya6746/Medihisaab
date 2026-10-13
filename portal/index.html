@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediHisaab — Client Download & Deployment Portal</title>
+  <link rel="icon" type="image/png" href="./medihisaab-icon.png">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --success: #16a34a;
+      --warning: #d97706;
+      --danger: #dc2626;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 0 1rem 3rem 1rem;
+    }
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid var(--border);
+      padding: 1.5rem 0;
+      margin-bottom: 2rem;
+    }
+    .header-container {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 1rem;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--primary);
+      color: white;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 1.25rem;
+    }
+    .brand h1 { font-size: 1.35rem; font-weight: 700; color: #0f172a; }
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 9999px;
+      background: #dbeafe;
+      color: #1e40af;
+      margin-left: 0.5rem;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    .hero {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2.5rem 2rem;
+      text-align: center;
+      margin-bottom: 2rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .hero h2 {
+      font-size: 1.85rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      color: #0f172a;
+    }
+    .hero p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      max-width: 700px;
+      margin: 0 auto 1.75rem auto;
+    }
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--primary);
+      color: white;
+      padding: 0.85rem 2rem;
+      border-radius: var(--radius);
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background 0.15s ease;
+      box-shadow: 0 2px 4px rgba(37,99,235,0.25);
+    }
+    .download-btn:hover { background: var(--primary-hover); }
+    .hero-meta {
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .card h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .card p, .card li {
+      font-size: 0.925rem;
+      color: #334155;
+    }
+    .card ul, .card ol {
+      padding-left: 1.25rem;
+      margin-top: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .card li { margin-bottom: 0.35rem; }
+    .code-block {
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      font-family: Consolas, monospace;
+      font-size: 0.85rem;
+      overflow-x: auto;
+      margin: 0.5rem 0;
+    }
+    .section-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin: 2rem 0 1rem 0;
+      color: #0f172a;
+    }
+    .specs-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    .specs-table th, .specs-table td {
+      border: 1px solid var(--border);
+      padding: 0.65rem 0.85rem;
+      text-align: left;
+    }
+    .specs-table th { background: #f1f5f9; font-weight: 600; }
+    footer {
+      max-width: 1000px;
+      margin: 3rem auto 0 auto;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-container">
+      <div class="brand">
+        <img src="./medihisaab-horizontal.png" alt="MediHisaab" style="height: 42px; width: auto; object-fit: contain;" />
+        <span class="badge">v1.0.0 Production Release</span>
+      </div>
+      <div>
+        <a href="#install-guide" style="color: var(--primary); text-decoration: none; font-size: 0.9rem; font-weight: 500; margin-right: 1.25rem;">Installation</a>
+        <a href="#lan-guide" style="color: var(--primary); text-decoration: none; font-size: 0.9rem; font-weight: 500; margin-right: 1.25rem;">LAN Setup</a>
+        <a href="#backup-guide" style="color: var(--primary); text-decoration: none; font-size: 0.9rem; font-weight: 500; margin-right: 1.25rem;">Backups</a>
+        <a href="/client" style="background: var(--primary); color: white; padding: 0.4rem 0.85rem; border-radius: 6px; text-decoration: none; font-size: 0.85rem; font-weight: 600;">Client Portal & Trial</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="hero">
+      <h2>Offline Pharmacy Billing & Inventory Management</h2>
+      <p>Self-contained retail pharmacy POS with FEFO batch dispensing, Schedule H1 statutory compliance, customer Khata ledger, ESC/POS thermal printing, and multi-counter LAN mode.</p>
+      <a href="../MediHisaab-Setup-1.0.0.exe" class="download-btn">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+        Download Windows Installer (v1.0.0)
+      </a>
+      <div class="hero-meta">
+        File: <strong>MediHisaab-Setup-1.0.0.exe</strong> (91.0 MB (95,442,984 bytes)) • Windows 10 / 11 (64-bit) • No Python or Node.js required
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card" id="install-guide">
+        <h3>1. Installation Guide</h3>
+        <ol>
+          <li>Download <strong>MediHisaab-Setup-1.0.0.exe</strong> from the button above.</li>
+          <li>Double-click the installer and follow the standard setup wizard.</li>
+          <li>Choose an installation directory (defaults to your user programs folder).</li>
+          <li>Launch the application using the created <strong>MediHisaab</strong> Desktop shortcut.</li>
+          <li>Complete the 1-time <strong>First-Run Setup</strong> (Store Name, Drug License No., Admin Username & Password).</li>
+        </ol>
+      </div>
+
+      <div class="card" id="lan-guide">
+        <h3>2. Multi-Counter LAN Setup</h3>
+        <p>Run on multiple counter terminals simultaneously without separate databases:</p>
+        <ol>
+          <li>On the <strong>Main PC</strong>, launch using shortcut: <strong>MediHisaab (LAN Server Mode)</strong>.</li>
+          <li>Allow incoming traffic through Windows Firewall once:</li>
+        </ol>
+        <div class="code-block">netsh advfirewall firewall add rule name="MediHisaab LAN" dir=in action=allow protocol=TCP localport=38291 profile=private</div>
+        <p>3. On <strong>Counter 2, Counter 3, etc.</strong>, open any browser and type: <code>http://[SERVER-IP]:38291</code></p>
+      </div>
+
+      <div class="card" id="backup-guide">
+        <h3>3. Backup & Restore Guide</h3>
+        <p>Safeguard sales history, inventory batches, and customer ledgers:</p>
+        <ul>
+          <li><strong>Location:</strong> <code>%LOCALAPPDATA%\PharmacyApp\backups\</code></li>
+          <li><strong>Manual Backup:</strong> Open Settings / Reports &gt; Disaster Recovery &gt; Click <strong>Create Hot Backup</strong>.</li>
+          <li><strong>USB Backup:</strong> Copy the generated <code>.pbk</code> backup file to an external USB drive weekly.</li>
+          <li><strong>Safety:</strong> Upgrades and uninstallations <strong>never</strong> delete existing business data.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>4. Hardware & Peripherals</h3>
+        <ul>
+          <li><strong>Barcode Scanners:</strong> Plug-and-play USB HID keyboard emulation supported natively on all barcode inputs.</li>
+          <li><strong>Thermal Receipt Printers:</strong> Compatible with 80mm and 58mm ESC/POS thermal printers via USB and Windows print spooler.</li>
+          <li><strong>Cash Drawers:</strong> Standard RJ-11/RJ-12 cash drawers triggered via printer kick pulse (ESC p 0 25 250).</li>
+          <li><strong>A4 / Laser Invoices:</strong> Full GST tax invoices printable directly to any standard laser or inkjet printer.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>5. Client Licensing & Evaluation</h3>
+        <p>Each pharmacy receives an offline-signed Ed25519 asymmetric license token:</p>
+        <ul>
+          <li><strong>Format:</strong> <code>LIC-CLXXXX-YYYYMMDD-XXXX.json</code></li>
+          <li><strong>Instant Free Trial:</strong> Sign up directly from the desktop app first launch for automatic free evaluation trial activation.</li>
+          <li><strong>Terminal Count:</strong> Configurable counter terminals (1–20) with LAN support.</li>
+          <li><strong>Importing:</strong> In-app Settings &gt; License &gt; Upload license file, or auto-activate on first launch.</li>
+          <li><strong>Offline Sovereignty:</strong> Licenses are verified 100% offline via embedded Ed25519 public key. Zero remote lockout of local data.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>6. Data Privacy & Offline Architecture</h3>
+        <p>MediHisaab is engineered for complete data sovereignty and local compliance:</p>
+        <ul>
+          <li><strong>100% Local Database:</strong> All sales invoices, medicines, customer ledgers, and doctor details are stored strictly in your local SQLite database at <code>%LOCALAPPDATA%\PharmacyApp\data\pharmacy.db</code>.</li>
+          <li><strong>Zero Telemetry of Patient Data:</strong> Patient names, prescriptions, transactions, and sales figures are NEVER transmitted to the vendor, licensing server, or third parties.</li>
+          <li><strong>Full Offline POS Operations:</strong> Routine counter billing, barcode scanning, stock lookups, and receipt printing do not require internet access after activation.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>7. System Specifications</h3>
+        <table class="specs-table">
+          <tr><th>Operating System</th><td>Windows 10 / Windows 11 (64-bit)</td></tr>
+          <tr><th>Processor / RAM</th><td>Intel Core i3 or higher / 4 GB RAM minimum</td></tr>
+          <tr><th>Disk Storage</th><td>200 MB free space for application + data</td></tr>
+          <tr><th>Dependencies</th><td>None (Python, SQLite, and Web Engine embedded)</td></tr>
+          <tr><th>Port Used</th><td>TCP 38291 (Localhost / Private LAN only)</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <h2 class="section-title">Release Notes — Version 1.0.0</h2>
+    <div class="card">
+      <ul>
+        <li><strong>First-Run Auto Trial:</strong> First launch offers instant account signup with automatic signed trial activation—no manual license file copying required.</li>
+        <li><strong>Frontend Redesign:</strong> Clean, practical pharmacy UI with calm color system (Blue=Action, Green=Success, Yellow=Warning, Red=Expiry/Danger). Removed artificial badges and uppercase labels.</li>
+        <li><strong>Admin Settings Module:</strong> Clean modal for Appearance (Light/Dark/System), 11 operational modules with navigation guards, and 6 POS billing preferences.</li>
+        <li><strong>Self-Contained Installer:</strong> PyInstaller standalone daemon packaged via Inno Setup 6. Zero Node.js or Python required on client machines.</li>
+        <li><strong>Data Protection:</strong> Active database at <code>%LOCALAPPDATA%\PharmacyApp\data\pharmacy.db</code> is strictly preserved during upgrades and uninstalls.</li>
+        <li><strong>Multi-Terminal LAN:</strong> SQLite WAL mode concurrency allowing counter terminals to bill across the store Wi-Fi/Ethernet with zero database collision.</li>
+        <li><strong>Ed25519 Cryptographic Licensing:</strong> Digital signatures verified offline against embedded public key. Private keys stay exclusively on the central vendor server.</li>
+      </ul>
+    </div>
+
+    <h2 class="section-title">Support & Client Distribution</h2>
+    <div class="card">
+      <p>For technical support, custom license keys, renewal assistance, or multi-store enterprise deployments:</p>
+      <ul style="margin-top: 0.5rem;">
+        <li><strong>Phone Support:</strong> <a href="tel:+919876543210" style="color:var(--primary); font-weight:600;">+91 98765 43210</a></li>
+        <li><strong>WhatsApp Helpdesk:</strong> <a href="https://wa.me/919876543210" target="_blank" style="color:#16a34a; font-weight:600;">+91 98765 43210 (Chat on WhatsApp)</a></li>
+        <li><strong>Email Support:</strong> <a href="mailto:support@apexhealth.local" style="color:var(--primary); font-weight:600;">support@apexhealth.local</a></li>
+        <li><strong>Documentation Directory:</strong> Installed locally to <code>C:\Users\[User]\AppData\Local\Programs\MediHisaab\docs\</code></li>
+        <li><strong>Distribution Method:</strong> Download <code>MediHisaab-Setup-1.0.0.exe</code> directly or deploy via USB pen drive to offline workstations.</li>
+      </ul>
+    </div>
+
+    <footer>
+      MediHisaab — Pharmacy Management System & POS • v1.0.0 • Offline Commercial Release • Designed for Retail Pharmacies
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,58 @@
+# Render Blueprint Specification for Pharmacy POS Software Distribution & Central Licensing Platform
+# Reference: https://render.com/docs/blueprint-spec
+
+version: "1"
+
+databases:
+  # Central Vendor Licensing & Client Portal Database (PostgreSQL)
+  - name: pharmacy-licensing-db
+    databaseName: pharmacy_licensing
+    user: pharmacy_admin
+    plan: free
+    region: oregon
+    ipAllowList: []
+
+services:
+  # 1. Public Product & Software Distribution Portal (Static Site)
+  # Strictly static - contains only software overview, installer downloads, system requirements, documentation, and release notes.
+  # NEVER contains client database files, client licenses, or private keys.
+  - type: web
+    name: pharmacy-pos-portal
+    runtime: static
+    buildCommand: "npm --workspace=apps/frontend run build && cp -r apps/frontend/dist/* portal/ || true"
+    staticPublishPath: portal
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+
+  # 2. Central Vendor Licensing & Management API (FastAPI Web Service)
+  # Serves vendor admin dashboard (/vendor), client licensing portal (/client), and Ed25519 issuance APIs.
+  - type: web
+    name: pharmacy-licensing-api
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: "pip install -r services/licensing-api/requirements.txt && pip install -e services/licensing-api"
+    startCommand: "uvicorn licensing_service.app:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pharmacy-licensing-db
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRY_MINUTES
+        value: "480"
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: LICENSE_PRIVATE_KEY_PEM
+        sync: false
