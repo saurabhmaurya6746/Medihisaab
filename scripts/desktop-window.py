@@ -67,8 +67,34 @@ def launch_native_webview(url: str, width: int, height: int) -> bool:
             confirm_close=False,
             easy_drag=False,
         )
+        def set_window_icon():
+            """Apply MediHisaab icon to all open WinForms windows."""
+            try:
+                import clr
+                import System.Drawing
+                from System.Windows.Forms import Application
+
+                base_dir = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+                candidates = [
+                    base_dir / "medihisaab-icon.ico",
+                    base_dir / "assets" / "medihisaab-icon.ico",
+                    base_dir.parent / "assets" / "medihisaab-icon.ico",
+                ]
+                icon_path = None
+                for c in candidates:
+                    if c.is_file():
+                        icon_path = str(c)
+                        break
+
+                if icon_path:
+                    icon = System.Drawing.Icon(icon_path)
+                    for form in Application.OpenForms:
+                        form.Icon = icon
+            except Exception:
+                pass
+
         # Run using winforms GUI (standard Windows desktop forms with WebView2)
-        webview.start(gui="winforms", debug=False)
+        webview.start(set_window_icon, gui="winforms", debug=False)
         return True
     except Exception as e:
         print(f"[WARN] Native WebView2 host could not start: {e}", file=sys.stderr)

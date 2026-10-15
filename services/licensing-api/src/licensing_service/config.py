@@ -32,9 +32,13 @@ class Settings(BaseSettings):
 
     # CORS & Security
     ALLOWED_ORIGINS: str = (
+        "https://medihisaab.onrender.com,"
+        "https://medihisaab-portal.onrender.com,"
+        "https://pharmacy-pos-portal.onrender.com,"
         "http://localhost:8000,http://127.0.0.1:8000,"
         "http://localhost:3000,http://127.0.0.1:3000,"
         "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:5174,http://127.0.0.1:5174,"
         "http://localhost:38291,http://127.0.0.1:38291"
     )
     CORS_ORIGINS: Optional[str] = None
@@ -56,18 +60,25 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> List[str]:
         raw = self.CORS_ORIGINS or self.ALLOWED_ORIGINS
-        origins = [o.strip() for o in raw.split(",") if o.strip()]
+        # Normalize: strip whitespace and trailing slashes from each origin
+        origins = [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
         defaults = [
+            "https://medihisaab.onrender.com",
+            "https://medihisaab-portal.onrender.com",
+            "https://pharmacy-pos-portal.onrender.com",
             "http://127.0.0.1:38291",
             "http://localhost:38291",
             "http://127.0.0.1:5173",
             "http://localhost:5173",
             "http://127.0.0.1:5174",
             "http://localhost:5174",
+            "http://127.0.0.1:8000",
+            "http://localhost:8000",
         ]
         for d in defaults:
-            if d not in origins:
-                origins.append(d)
+            clean_d = d.rstrip("/")
+            if clean_d not in origins:
+                origins.append(clean_d)
         return origins
 
     @property

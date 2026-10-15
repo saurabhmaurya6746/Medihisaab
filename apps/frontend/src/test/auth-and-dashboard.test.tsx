@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import App from "@/App";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { signOut } from "@/lib/auth";
 
 describe("Account, Client Dashboard & Admin Experience", () => {
@@ -239,4 +239,94 @@ describe("Account, Client Dashboard & Admin Experience", () => {
     expect(res.id).toBe(88);
     expect(res.vendor_notification_sent).toBe(false);
   });
+
+  it("signup handles network/CORS failure without falsely claiming success", async () => {
+    vi.spyOn(api, "clientSignup").mockRejectedValue(
+      new ApiError(
+        "Unable to connect to the MediHisaab licensing server. The server may be unreachable or the request was blocked by network/CORS policy.",
+        0,
+        undefined,
+        true
+      )
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/account?mode=signup"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/Pharmacy name/i), {
+      target: { value: "Apollo Care" },
+    });
+    fireEvent.change(screen.getByLabelText(/Owner's name/i), {
+      target: { value: "Rajesh Kumar" },
+    });
+    fireEvent.change(screen.getByLabelText(/Email address/i), {
+      target: { value: "rajesh@apollocare.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/Phone number/i), {
+      target: { value: "9876543210" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Password$/i), {
+      target: { value: "Password123!" },
+    });
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), {
+      target: { value: "Password123!" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Create Pharmacy Account/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Unable to connect to MediHisaab licensing server.*CORS\/network/i)
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("signup shows exact duplicate email validation error from API", async () => {
+    vi.spyOn(api, "clientSignup").mockRejectedValue(
+      new ApiError(
+        "An account with this email address already exists. Please sign in.",
+        400,
+        "An account with this email address already exists. Please sign in.",
+        false,
+        true
+      )
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/account?mode=signup"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText(/Pharmacy name/i), {
+      target: { value: "Apollo Care" },
+    });
+    fireEvent.change(screen.getByLabelText(/Owner's name/i), {
+      target: { value: "Rajesh Kumar" },
+    });
+    fireEvent.change(screen.getByLabelText(/Email address/i), {
+      target: { value: "existing@apollocare.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/Phone number/i), {
+      target: { value: "9876543210" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Password$/i), {
+      target: { value: "Password123!" },
+    });
+    fireEvent.change(screen.getByLabelText(/Confirm password/i), {
+      target: { value: "Password123!" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Create Pharmacy Account/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/An account with this email address already exists\. Please sign in\./i)
+      ).toBeInTheDocument();
+    });
+  });
 });
+

@@ -71,7 +71,7 @@ describe("ApiClient - Envelope & Error Handling", () => {
     } catch (err: any) {
       expect(err).toBeInstanceOf(ApiError);
       expect(err.status).toBe(0);
-      expect(err.message).toContain("Unable to connect to MediHisaab server");
+      expect(err.message).toContain("Unable to connect to the MediHisaab licensing server");
     }
   });
 
@@ -97,5 +97,127 @@ describe("ApiClient - Envelope & Error Handling", () => {
     const res = await api.clientRecordDownloadRequest("installer-windows", "test-token");
     expect(res.download_url).toBe("/MediHisaab-Setup-1.0.0.exe");
     expect(res.sha256).toBe("2e323e4b90768f866699b24c2aad6ba36f201e092acd65ba8cf6010b0f91c02f");
+  });
+
+  it("handles network/CORS failures with explicit connection error and isNetworkError flag", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+
+    try {
+      await api.clientSignup({
+        email: "test@example.com",
+        password: "Password123!",
+        pharmacy_name: "Test Pharmacy",
+        contact_person: "Test Owner",
+        phone: "+91 98765 43210",
+      });
+      expect.fail("Should have thrown ApiError");
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err.status).toBe(0);
+      expect(err.isNetworkError).toBe(true);
+      expect(err.message).toContain("Unable to connect to the MediHisaab licensing server");
+      expect(err.message).toContain("network/CORS");
+    }
+  });
+
+  it("formats FastAPI 422 array validation errors into readable message", async () => {
+    const fastApiValidation = {
+      detail: [
+        {
+          type: "string_too_short",
+          loc: ["body", "password"],
+          msg: "String should have at least 8 characters",
+        },
+        {
+          type: "missing",
+          loc: ["body", "phone"],
+          msg: "Field required",
+        },
+      ],
+    };
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      headers: new Headers({ "content-type": "application/json" }),
+      text: async () => JSON.stringify(fastApiValidation),
+    } as unknown as Response);
+
+    try {
+      await api.clientSignup({
+        email: "test@example.com",
+        password: "short",
+        pharmacy_name: "Test Pharmacy",
+        contact_person: "Test Owner",
+        phone: "",
+      });
+      expect.fail("Should have thrown ApiError");
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err.status).toBe(422);
+      expect(err.isValidationError).toBe(true);
+      expect(err.message).toContain("password: String should have at least 8 characters");
+      expect(err.message).toContain("phone: Field required");
+    }
+  });
+
+  it("preserves 400 bad request duplicate email error message", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      headers: new Headers({ "content-type": "application/json" }),
+      text: async () =>
+        JSON.stringify({
+          detail: "An account with this email address already exists. Please sign in.",
+        }),
+    } as unknown as Response);
+
+    try {
+      await api.clientSignup({
+        email: "duplicate@example.com",
+        password: "Password123!",
+        pharmacy_name: "Test Pharmacy",
+        contact_person: "Test Owner",
+        phone: "9876543210",
+      });
+      expect.fail("Should have thrown ApiError");
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err.status).toBe(400);
+      expect(err.isValidationError).toBe(true);
+      expect(err.message).toBe("An account with this email address already exists. Please sign in.");
+    }
+  });
+});
+
+import { normalizeApiBaseUrl } from "@/lib/api";
+
+describe("normalizeApiBaseUrl helper", () => {
+  it("defaults to /api/v1 when unset, empty, or whitespace", () => {
+    expect(normalizeApiBaseUrl(undefined)).toBe("/api/v1");
+    expect(normalizeApiBaseUrl(null)).toBe("/api/v1");
+    expect(normalizeApiBaseUrl("")).toBe("/api/v1");
+    expect(normalizeApiBaseUrl("   ")).toBe("/api/v1");
+  });
+
+  it("normalizes hostname without trailing slash", () => {
+    expect(normalizeApiBaseUrl("https://medihisaab-portal.onrender.com")).toBe(
+      "https://medihisaab-portal.onrender.com/api/v1"
+    );
+  });
+
+  it("normalizes hostname with trailing slash", () => {
+    expect(normalizeApiBaseUrl("https://medihisaab-portal.onrender.com/")).toBe(
+      "https://medihisaab-portal.onrender.com/api/v1"
+    );
+  });
+
+  it("normalizes URL already ending with /api/v1 or /api/v1/", () => {
+    expect(normalizeApiBaseUrl("https://medihisaab-portal.onrender.com/api/v1")).toBe(
+      "https://medihisaab-portal.onrender.com/api/v1"
+    );
+    expect(normalizeApiBaseUrl("https://medihisaab-portal.onrender.com/api/v1/")).toBe(
+      "https://medihisaab-portal.onrender.com/api/v1"
+    );
   });
 });

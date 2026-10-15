@@ -14,7 +14,7 @@ echo.
 
 set "REPO_ROOT=%~dp0.."
 set "DIST_DIR=%REPO_ROOT%\dist-release"
-set "STAGE_DIR=%DIST_DIR%\MediHisaab-v1.0.1"
+set "STAGE_DIR=%DIST_DIR%\MediHisaab-v1.0.3"
 
 echo [STEP 1/4] Building web frontend production bundle...
 cd /d "%REPO_ROOT%"
@@ -61,8 +61,13 @@ copy "%REPO_ROOT%\apps\daemon\pyproject.toml" "%STAGE_DIR%\daemon\" >nul
 REM Copy the standalone daemon bundle used by the production launcher
 xcopy "%REPO_ROOT%\dist\pharmacy-daemon\*" "%STAGE_DIR%\daemon\" /s /e /y >nul
 
+REM Copy Branding Assets
+copy "%REPO_ROOT%\assets\medihisaab-icon.ico" "%STAGE_DIR%\" >nul
+copy "%REPO_ROOT%\assets\medihisaab-logo.png" "%STAGE_DIR%\" >nul
+
 REM Copy Launchers
 copy "%REPO_ROOT%\scripts\start-pharmacy.bat" "%STAGE_DIR%\" >nul
+copy "%REPO_ROOT%\scripts\start-pharmacy-hidden.vbs" "%STAGE_DIR%\" >nul
 copy "%REPO_ROOT%\scripts\start-lan-server.bat" "%STAGE_DIR%\" >nul
 copy "%REPO_ROOT%\scripts\check-daemon.ps1" "%STAGE_DIR%\" >nul
 copy "%REPO_ROOT%\scripts\desktop-window.py" "%STAGE_DIR%\" >nul
@@ -77,20 +82,20 @@ echo [SUCCESS] Staged application files successfully.
 
 echo.
 echo [STEP 3/4] Creating portable ZIP archive...
-powershell -Command "Compress-Archive -Path '%STAGE_DIR%\*' -DestinationPath '%DIST_DIR%\MediHisaab-v1.0.1-Portable.zip' -Force"
+powershell -Command "Compress-Archive -Path '%STAGE_DIR%\*' -DestinationPath '%DIST_DIR%\MediHisaab-v1.0.3-Portable.zip' -Force"
 if %ERRORLEVEL% equ 0 (
-  echo [SUCCESS] Created portable package: %DIST_DIR%\MediHisaab-v1.0.1-Portable.zip
+  echo [SUCCESS] Created portable package: %DIST_DIR%\MediHisaab-v1.0.3-Portable.zip
 )
 
 echo.
 echo [STEP 4/5] Building standalone setup installer...
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name MediHisaab-Setup-1.0.2 --icon "%REPO_ROOT%\assets\medihisaab-icon.ico" --add-data "%DIST_DIR%\MediHisaab-v1.0.1-Portable.zip;." --distpath "%DIST_DIR%" --workpath "%REPO_ROOT%\build\portable-installer" --specpath "%REPO_ROOT%\build\portable-installer" "%REPO_ROOT%\scripts\portable-installer.py"
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name MediHisaab-Setup-1.0.3 --icon "%REPO_ROOT%\assets\medihisaab-icon.ico" --add-data "%DIST_DIR%\MediHisaab-v1.0.3-Portable.zip;." --distpath "%DIST_DIR%" --workpath "%REPO_ROOT%\build\portable-installer" --specpath "%REPO_ROOT%\build\portable-installer" "%REPO_ROOT%\scripts\portable-installer.py"
 if %ERRORLEVEL% neq 0 (
   echo [ERROR] Standalone setup installer build failed!
   pause
   exit /b 1
 )
-echo [SUCCESS] Created setup installer: %DIST_DIR%\MediHisaab-Setup-1.0.2.exe
+  echo [SUCCESS] Created setup installer: %DIST_DIR%\MediHisaab-Setup-1.0.3.exe
 
 echo.
 echo [STEP 5/5] Checking for Inno Setup Compiler ISCC.exe...
@@ -109,7 +114,7 @@ if defined ISCC_EXE (
   echo [INFO] Compiling Windows installer executable...
   "!ISCC_EXE!" "%REPO_ROOT%\installer\pharmacy-pos-installer.iss"
   if %ERRORLEVEL% equ 0 (
-    echo [SUCCESS] Windows installer compiled: %DIST_DIR%\MediHisaab-Setup-1.0.1.exe
+    echo [SUCCESS] Windows installer compiled: %DIST_DIR%\MediHisaab-Setup-1.0.3.exe
   ) else (
     echo [WARN] Inno Setup compilation encountered an issue. Portable zip is still available.
   )
@@ -123,7 +128,7 @@ if defined ISCC_EXE (
 echo.
 echo ==============================================================================
 echo  PACKAGING COMPLETE
-echo  Staged Folder:    %STAGE_DIR%
-  echo  Portable Archive: %DIST_DIR%\MediHisaab-v1.0.1-Portable.zip
+  echo  Staged Folder:    %STAGE_DIR%
+  echo  Portable Archive: %DIST_DIR%\MediHisaab-v1.0.3-Portable.zip
 echo ==============================================================================
 pause

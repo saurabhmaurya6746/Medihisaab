@@ -1391,12 +1391,16 @@ def test_scenario_33_smtp_notification_behavior_and_cors_configuration(client, a
     from unittest.mock import patch
     import smtplib
 
-    # 1. CORS allowlist contains desktop daemon origin (http://127.0.0.1:38291)
+    # 1. CORS allowlist contains desktop daemon origin and production Render web origins
     cors_list = settings.cors_origins_list
     assert "http://127.0.0.1:38291" in cors_list
     assert "http://localhost:38291" in cors_list
     assert "http://127.0.0.1:5173" in cors_list
     assert "http://localhost:5173" in cors_list
+    assert "https://medihisaab.onrender.com" in cors_list
+    assert "https://medihisaab-portal.onrender.com" in cors_list
+    for origin in cors_list:
+        assert not origin.endswith("/"), f"Origin {origin} must not have a trailing slash"
     assert "*" not in cors_list
 
     # 2. SMTP unconfigured behavior: returns False, informative error, no exception
@@ -1713,6 +1717,44 @@ def test_scenario_38_download_audit_logging(client, admin_headers):
     raw_audit = json.dumps(events)
     assert "AuditPassword2026!" not in raw_audit
     assert "password_hash" not in raw_audit
+
+
+def test_scenario_39_production_cors_preflight_and_origin_verification(client):
+    """Scenario 39: Verify OPTIONS preflight and POST requests from production origin
+    https://medihisaab.onrender.com succeed without CORS rejection."""
+    production_origin = "https://medihisaab.onrender.com"
+
+    # 1. Test OPTIONS preflight for client signup
+    options_res = client.options(
+        "/api/v1/client/auth/signup",
+        headers={
+            "Origin": production_origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert options_res.status_code == 200, f"Preflight failed with status {options_res.status_code}: {options_res.text}"
+    assert options_res.headers.get("access-control-allow-origin") == production_origin
+    assert "POST" in options_res.headers.get("access-control-allow-methods", "")
+
+    # 2. Test actual POST request with production Origin header
+    post_res = client.post(
+        "/api/v1/client/auth/signup",
+        json={
+            "email": "cors_test@example.com",
+            "password": "short", # Triggers 422 validation
+            "pharmacy_name": "CORS Pharmacy",
+            "contact_person": "CORS Tester",
+            "phone": "9876543210",
+        },
+        headers={
+            "Origin": production_origin,
+        },
+    )
+    # The API returns 422 for short password, but CORS allow-origin header MUST be present!
+    assert post_res.status_code == 422
+    assert post_res.headers.get("access-control-allow-origin") == production_origin
+
 
 
 

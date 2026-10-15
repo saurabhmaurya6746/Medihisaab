@@ -16,13 +16,17 @@ set "SCRIPT_DIR=%~dp0"
 set "DAEMON_SRC=%SCRIPT_DIR%..\apps\daemon\src"
 set "APP_URL=http://127.0.0.1:38291"
 set "PHARMACY_WEB_DIR=%SCRIPT_DIR%web"
+if not exist "%PHARMACY_WEB_DIR%\index.html" (
+  if exist "%SCRIPT_DIR%..\apps\web\dist\index.html" (
+    set "PHARMACY_WEB_DIR=%SCRIPT_DIR%..\apps\web\dist"
+  )
+)
 
 REM The installed daemon serves the UI from PHARMACY_WEB_DIR. Set this explicitly
 REM because the executable lives under daemon\ while the UI lives under web\.
 if not exist "%PHARMACY_WEB_DIR%\index.html" (
   echo [ERROR] MediHisaab UI files were not found at "%PHARMACY_WEB_DIR%".
   echo [ERROR] Repair or reinstall MediHisaab so the web folder is installed beside this launcher.
-  pause
   exit /b 1
 )
 
@@ -32,7 +36,6 @@ if exist "%SCRIPT_DIR%check-daemon.ps1" (
   if !ERRORLEVEL! equ 2 goto :verify_app_page
   if !ERRORLEVEL! equ 1 (
     echo [ERROR] Another application is using port 38291. Close it and retry.
-    pause
     exit /b 1
   )
 )
@@ -61,7 +64,6 @@ where python >nul 2>nul
 if %ERRORLEVEL% neq 0 (
   echo [ERROR] Neither standalone MediHisaab Daemon executable nor Python runtime was found.
   echo [ERROR] Please install MediHisaab using the official installer.
-  pause
   exit /b 1
 )
 
@@ -100,7 +102,6 @@ if !VERIFY_ATTEMPTS! lss 5 (
   goto :verify_page_loop
 )
 echo [ERROR] MediHisaab UI did not load from %APP_URL%. Restart the app and try again.
-pause
 exit /b 1
 
 :open_desktop_window
@@ -151,7 +152,6 @@ if defined CHROME_EXE (
 
 echo [ERROR] No desktop window host is installed and no supported app-mode browser was found.
 echo [ERROR] Repair MediHisaab or install Microsoft Edge WebView2, then try again.
-pause
 exit /b 1
 
 :done

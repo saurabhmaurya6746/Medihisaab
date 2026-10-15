@@ -21,6 +21,9 @@ services:
     runtime: static
     buildCommand: "npm --workspace=apps/frontend run build && cp -r apps/frontend/dist/* portal/ || true"
     staticPublishPath: portal
+    envVars:
+      - key: VITE_LICENSING_API_URL
+        value: https://medihisaab-portal.onrender.com
     headers:
       - path: /*
         name: X-Content-Type-Options
@@ -53,6 +56,6 @@ services:
       - key: JWT_EXPIRY_MINUTES
         value: "480"
       - key: CORS_ORIGINS
-        value: "*"
+        value: "https://medihisaab.onrender.com,https://medihisaab-portal.onrender.com,https://pharmacy-pos-portal.onrender.com"
       - key: LICENSE_PRIVATE_KEY_PEM
         sync: false

@@ -120,9 +120,11 @@ export async function signIn(email: string, password: string): Promise<Session> 
     if (err instanceof ApiError && err.status === 403) {
       throw new Error(err.message || "Your client account is suspended. Please contact support.");
     }
-    // Network / connectivity error: pass through
-    if (err instanceof ApiError && err.status === 0) {
-      throw err;
+    // Network / connectivity / CORS error: pass through explicit connection error
+    if (err instanceof ApiError && (err.isNetworkError || err.status === 0)) {
+      throw new Error(
+        "Unable to connect to MediHisaab licensing server. Please check your internet connection or server CORS/network reachability."
+      );
     }
   }
 
@@ -146,9 +148,11 @@ export async function signIn(email: string, password: string): Promise<Session> 
     if (adminErr instanceof ApiError && adminErr.status === 403) {
       throw new Error(adminErr.message || "Account is deactivated. Contact the system owner.");
     }
-    // Network / connectivity error: pass through
-    if (adminErr instanceof ApiError && adminErr.status === 0) {
-      throw adminErr;
+    // Network / connectivity / CORS error: pass through explicit connection error
+    if (adminErr instanceof ApiError && (adminErr.isNetworkError || adminErr.status === 0)) {
+      throw new Error(
+        "Unable to connect to MediHisaab licensing server. Please check your internet connection or server CORS/network reachability."
+      );
     }
   }
 
@@ -178,6 +182,12 @@ export async function createAccount(input: {
       phone: input.phone.trim(),
     });
 
+    // Verification check: never consider signup successful unless the server returned
+    // a valid access_token and client record
+    if (!res || !res.access_token || !res.client || !res.client.client_code) {
+      throw new Error("Signup failed: Server did not return a valid authentication token.");
+    }
+
     const session: Session = {
       email: res.email || res.client.email || cleanEmail,
       role: "client",
@@ -190,6 +200,11 @@ export async function createAccount(input: {
     return session;
   } catch (err) {
     if (err instanceof ApiError) {
+      if (err.isNetworkError || err.status === 0) {
+        throw new Error(
+          "Unable to connect to MediHisaab licensing server. Please check your internet connection or server CORS/network reachability."
+        );
+      }
       throw new Error(err.message || "Failed to create account. Please check your information.");
     }
     throw err;

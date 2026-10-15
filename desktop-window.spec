@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:/Users/hp/Desktop/Major Project/Good to Go/Pharmacy project/scripts/../assets/medihisaab-icon.ico'],
+    icon=['assets/medihisaab-icon.ico'],
 )

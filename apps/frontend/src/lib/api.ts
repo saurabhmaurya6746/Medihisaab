@@ -219,22 +219,39 @@ export interface SystemSettingsData {
 export class ApiError extends Error {
   status: number;
   detail?: string | undefined;
+  isNetworkError?: boolean | undefined;
+  isValidationError?: boolean | undefined;
+  validationErrors?: string[] | undefined;
 
-  constructor(message: string, status: number, detail?: string | undefined) {
+  constructor(
+    message: string,
+    status: number,
+    detail?: string | undefined,
+    isNetworkError?: boolean | undefined,
+    isValidationError?: boolean | undefined,
+    validationErrors?: string[] | undefined
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.detail = detail;
+    this.isNetworkError = isNetworkError ?? (status === 0);
+    this.isValidationError = isValidationError ?? (status === 400 || status === 422);
+    this.validationErrors = validationErrors;
   }
 }
 
-function getApiBaseUrl(): string {
-  const envUrl = (import.meta.env as Record<string, string | undefined>)["VITE_LICENSING_API_URL"];
-  if (envUrl) {
-    const trimmed = envUrl.endsWith("/") ? envUrl.slice(0, -1) : envUrl;
-    return trimmed.endsWith("/api/v1") ? trimmed : `${trimmed}/api/v1`;
+export function normalizeApiBaseUrl(rawUrl?: string | null): string {
+  if (!rawUrl || !rawUrl.trim()) {
+    return "/api/v1";
   }
-  return "/api/v1";
+  const trimmed = rawUrl.trim().replace(/\/+$/, "");
+  return trimmed.endsWith("/api/v1") ? trimmed : `${trimmed}/api/v1`;
+}
+
+export function getApiBaseUrl(): string {
+  const envUrl = (import.meta.env as Record<string, string | undefined>)["VITE_LICENSING_API_URL"];
+  return normalizeApiBaseUrl(envUrl);
 }
 
 class ApiClient {
@@ -268,10 +285,11 @@ class ApiClient {
     try {
       response = await fetch(url, { ...options, headers });
     } catch {
-      throw new ApiError(
-        "Unable to connect to MediHisaab server. Please check your internet connection.",
-        0
-      );
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      const msg = isOffline
+        ? "You appear to be offline. Please check your internet connection."
+        : "Unable to connect to the MediHisaab licensing server. The server may be unreachable or the request was blocked by network/CORS policy.";
+      throw new ApiError(msg, 0, undefined, true);
     }
 
     // Handle file downloads (e.g., json or blob)
@@ -300,10 +318,46 @@ class ApiClient {
     }
 
     if (!response.ok) {
-      const errorMsg =
-        (json && (json.detail || json.message)) ||
-        `Request failed with HTTP status ${response.status}`;
-      throw new ApiError(errorMsg, response.status, json?.detail);
+      let errorMsg = `Request failed with HTTP status ${response.status}`;
+      let detailString: string | undefined = undefined;
+      const validationList: string[] = [];
+
+      if (json && typeof json === "object") {
+        if (typeof json.detail === "string") {
+          errorMsg = json.detail;
+          detailString = json.detail;
+        } else if (Array.isArray(json.detail)) {
+          // Format FastAPI 422 validation error array into readable messages
+          for (const item of json.detail) {
+            if (typeof item === "string") {
+              validationList.push(item);
+            } else if (item && typeof item === "object") {
+              const field = Array.isArray(item.loc)
+                ? item.loc.filter((part: unknown) => part !== "body").join(".")
+                : "";
+              const msg = item.msg || "Invalid input";
+              validationList.push(field ? `${field}: ${msg}` : msg);
+            }
+          }
+          if (validationList.length > 0) {
+            errorMsg = validationList.join(" | ");
+            detailString = errorMsg;
+          }
+        } else if (typeof json.message === "string") {
+          errorMsg = json.message;
+          detailString = json.message;
+        }
+      }
+
+      const isValidation = response.status === 400 || response.status === 422;
+      throw new ApiError(
+        errorMsg,
+        response.status,
+        detailString,
+        false,
+        isValidation,
+        validationList.length > 0 ? validationList : undefined
+      );
     }
 
     if (json && typeof json === "object" && "data" in json) {
