@@ -168,11 +168,23 @@ export const AppShell: React.FC = () => {
         setIsProfileMenuOpen(false);
       }
     };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isProfileMenuOpen) {
+        setIsProfileMenuOpen(false);
+        profileDropdownRef.current
+          ?.querySelector<HTMLButtonElement>("button")
+          ?.focus();
+      }
+    };
     if (isMoreOpen || isProfileMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
+    if (isProfileMenuOpen) {
+      document.addEventListener("keydown", handleEscape);
+    }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
     };
   }, [isMoreOpen, isProfileMenuOpen]);
 
@@ -421,6 +433,8 @@ export const AppShell: React.FC = () => {
                 type="button"
                 className="operator-badge-container"
                 onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                aria-haspopup="menu"
+                aria-expanded={isProfileMenuOpen}
                 style={{
                   cursor: "pointer",
                   border: "1px solid var(--border-color)",
@@ -461,17 +475,20 @@ export const AppShell: React.FC = () => {
 
               {isProfileMenuOpen && (
                 <div
+                    role="menu"
                   style={{
                     position: "absolute",
                     top: "calc(100% + 6px)",
                     right: 0,
-                    width: 275,
-                    background: "var(--bg-panel)",
+                    width: "min(275px, calc(100vw - 24px))",
+                    maxHeight: "calc(100vh - 84px)",
+                    backgroundColor: "var(--dropdown-bg, #1e293b)",
                     border: "1px solid var(--border-color)",
                     borderRadius: "var(--radius-md)",
-                    boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
-                    zIndex: 1050,
-                    overflow: "hidden",
+                    boxShadow: "var(--dropdown-shadow, 0 10px 25px rgba(0,0,0,0.6))",
+                    zIndex: 2000,
+                    overflowX: "hidden",
+                    overflowY: "auto",
                   }}
                 >
                   <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border-color)", background: "var(--bg-secondary)" }}>
@@ -486,7 +503,7 @@ export const AppShell: React.FC = () => {
                     </div>
                   </div>
 
-                  <div style={{ padding: 6, display: "flex", flexDirection: "column", gap: 2 }}>
+                  <div style={{ padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"

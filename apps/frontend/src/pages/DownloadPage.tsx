@@ -33,8 +33,8 @@ export function DownloadPage() {
     sha256: releaseConfig.sha256,
     releaseDate: releaseConfig.releaseDate,
     requirements: releaseConfig.requirements,
-    directDownloadUrl: "https://github.com/saurabhmaurya6746/Medihisaab/releases/download/v1.0.3/MediHisaab-Setup-1.0.3.exe",
-    filename: "MediHisaab-Setup-1.0.3.exe",
+    directDownloadUrl: releaseConfig.directDownloadUrl,
+    filename: releaseConfig.filename,
   });
 
   useEffect(() => {
@@ -96,7 +96,7 @@ export function DownloadPage() {
       // Stream binary with authentication token attached
       const downloadPath = record.download_url || "/api/v1/client/downloads/installer-windows/file";
       const fullDownloadUrl = buildAuthenticatedDownloadUrl(downloadPath, token);
-      const filename = record.filename || r.filename || "MediHisaab-Setup-1.0.3.exe";
+      const filename = record.filename || r.filename || "MediHisaab-Setup-1.0.6.exe";
 
       const link = document.createElement("a");
       link.href = fullDownloadUrl;
@@ -106,7 +106,8 @@ export function DownloadPage() {
       link.remove();
     } catch (err: any) {
       toast.error(err.message || "Failed to record download request. Downloading from direct mirror…");
-      const fallbackUrl = r.directDownloadUrl || "https://github.com/saurabhmaurya6746/Medihisaab/releases/download/v1.0.3/MediHisaab-Setup-1.0.3.exe";
+      const fallbackUrl = r.directDownloadUrl || releaseConfig.directDownloadUrl;
+      if (!fallbackUrl) throw err;
       window.location.href = fallbackUrl;
     } finally {
       setDownloading(false);

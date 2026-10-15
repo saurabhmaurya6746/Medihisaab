@@ -140,6 +140,9 @@ async def serve_robots():
     return JSONResponse({"message": "Robots not found"}, status_code=404)
 
 
+@app.get("/MediHisaab-Setup-1.0.6.exe", include_in_schema=False)
+@app.get("/downloads/MediHisaab-Setup-1.0.6.exe", include_in_schema=False)
+@app.get("/download/MediHisaab-Setup-1.0.6.exe", include_in_schema=False)
 @app.get("/MediHisaab-Setup-1.0.3.exe", include_in_schema=False)
 @app.get("/MediHisaab-Setup-1.0.0.exe", include_in_schema=False)
 @app.get("/downloads/MediHisaab-Setup-1.0.3.exe", include_in_schema=False)

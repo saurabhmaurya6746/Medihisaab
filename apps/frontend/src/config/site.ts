@@ -50,14 +50,18 @@ export const releaseConfig: {
   version: string | null;
   fileSize: string | null;
   installerUrl: string | null;
+  directDownloadUrl: string | null;
+  filename: string | null;
   sha256: string | null;
   releaseDate: string | null;
   requirements: string[] | null;
 } = {
-  version: "1.0.3",
-  fileSize: "91.0 MB (95,453,540 bytes)",
-  installerUrl: "/MediHisaab-Setup-1.0.3.exe",
-  sha256: "e16d1742f00a7f9e4dea9010c01849d8ec43243cdf2d03ad3aa047cb36cfe583",
+  version: "1.0.6",
+  fileSize: "121.0 MB (126,833,835 bytes)",
+  installerUrl: "/MediHisaab-Setup-1.0.6.exe",
+  directDownloadUrl: "https://github.com/saurabhmaurya6746/Medihisaab/releases/download/v1.0.6/MediHisaab-Setup-1.0.6.exe",
+  filename: "MediHisaab-Setup-1.0.6.exe",
+  sha256: "f9729901c59d88a0ff39333b1541771f9098da84d0db11198409926ed1b0b0c7",
   releaseDate: "October 2026",
   requirements: [
     "Windows 10 or Windows 11 (64-bit)",

@@ -1477,16 +1477,16 @@ def test_scenario_34_download_request_audit_and_gating(client, db_session):
     assert res_list.status_code == 200
     downloads = res_list.json()["data"]
     installer = next(d for d in downloads if d["id"] == "installer-windows")
-    assert installer["filename"] == "MediHisaab-Setup-1.0.3.exe"
-    assert "95,453,540 bytes" in installer["file_size"]
-    assert installer["sha256"] == "e16d1742f00a7f9e4dea9010c01849d8ec43243cdf2d03ad3aa047cb36cfe583"
+    assert installer["filename"] == "MediHisaab-Setup-1.0.6.exe"
+    assert "126,833,835 bytes" in installer["file_size"]
+    assert installer["sha256"] == "f9729901c59d88a0ff39333b1541771f9098da84d0db11198409926ed1b0b0c7"
 
     # 4. Request download audit event
     res_req = client.post("/api/v1/client/downloads/installer-windows/request", headers=client_headers)
     assert res_req.status_code == 200
     req_data = res_req.json()["data"]
     assert req_data["recorded"] is True
-    assert req_data["filename"] == "MediHisaab-Setup-1.0.3.exe"
+    assert req_data["filename"] == "MediHisaab-Setup-1.0.6.exe"
     assert req_data["download_url"] == "/api/v1/client/downloads/installer-windows/file"
 
     # 5. Verify audit event was stored in database
@@ -1507,11 +1507,11 @@ def test_scenario_34_download_request_audit_and_gating(client, db_session):
     auth_binary = client.get(f"/api/v1/client/downloads/installer-windows/file?token={token}")
     assert auth_binary.status_code == 200
     assert "application/vnd.microsoft.portable-executable" in auth_binary.headers.get("content-type", "")
-    assert 'attachment; filename="MediHisaab-Setup-1.0.3.exe"' in auth_binary.headers.get("content-disposition", "")
+    assert 'attachment; filename="MediHisaab-Setup-1.0.6.exe"' in auth_binary.headers.get("content-disposition", "")
     assert len(auth_binary.content) > 0
 
     # Also test public root installer route
-    root_binary = client.get("/MediHisaab-Setup-1.0.3.exe")
+    root_binary = client.get("/MediHisaab-Setup-1.0.6.exe")
     assert root_binary.status_code == 200
     assert "application/vnd.microsoft.portable-executable" in root_binary.headers.get("content-type", "")
     assert len(root_binary.content) > 0

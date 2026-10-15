@@ -563,7 +563,7 @@ def record_download_request(
     client_ip = request.client.host if request and request.client else "unknown"
     is_installer = "installer" in item_id
     filename = latest_meta["filename"] if is_installer else item_id
-    version = latest_meta["version"] if is_installer else "1.0.3"
+    version = latest_meta["version"]
     sha256 = latest_meta["sha256"] if is_installer else ""
 
     log_audit_event(

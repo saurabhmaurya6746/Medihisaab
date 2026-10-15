@@ -329,7 +329,7 @@ describe("Account, Client Dashboard & Admin Experience", () => {
     });
   });
 
-  it("authenticated client download: page displays v1.0.3 metadata and triggers recorded download", async () => {
+  it("authenticated client download: page displays v1.0.6 metadata and triggers recorded download", async () => {
     localStorage.setItem(
       "medihisaab_session",
       JSON.stringify({
@@ -345,15 +345,15 @@ describe("Account, Client Dashboard & Admin Experience", () => {
     vi.spyOn(api, "clientGetDownloads").mockResolvedValue([
       {
         id: "installer-windows",
-        title: "MediHisaab Windows Installer (v1.0.3)",
-        version: "1.0.3",
-        filename: "MediHisaab-Setup-1.0.3.exe",
-        file_size: "91.0 MB (95,453,540 bytes)",
-        sha256: "e16d1742f00a7f9e4dea9010c01849d8ec43243cdf2d03ad3aa047cb36cfe583",
+        title: "MediHisaab Windows Installer (v1.0.6)",
+        version: "1.0.6",
+        filename: "MediHisaab-Setup-1.0.6.exe",
+        file_size: "121.0 MB (126,833,835 bytes)",
+        sha256: "f9729901c59d88a0ff39333b1541771f9098da84d0db11198409926ed1b0b0c7",
         release_date: "October 2026",
         os: "Windows 10 / 11 (64-bit)",
         download_url: "/api/v1/client/downloads/installer-windows/file",
-        direct_download_url: "https://github.com/saurabhmaurya6746/Medihisaab/releases/download/v1.0.3/MediHisaab-Setup-1.0.3.exe",
+        direct_download_url: "https://github.com/saurabhmaurya6746/Medihisaab/releases/download/v1.0.6/MediHisaab-Setup-1.0.6.exe",
         is_installer: true,
         description: "Official release",
       },
@@ -361,9 +361,9 @@ describe("Account, Client Dashboard & Admin Experience", () => {
 
     const recordSpy = vi.spyOn(api, "clientRecordDownloadRequest").mockResolvedValue({
       download_url: "/api/v1/client/downloads/installer-windows/file",
-      filename: "MediHisaab-Setup-1.0.3.exe",
-      sha256: "e16d1742f00a7f9e4dea9010c01849d8ec43243cdf2d03ad3aa047cb36cfe583",
-      version: "1.0.3",
+      filename: "MediHisaab-Setup-1.0.6.exe",
+      sha256: "f9729901c59d88a0ff39333b1541771f9098da84d0db11198409926ed1b0b0c7",
+      version: "1.0.6",
       recorded: true,
     });
 
@@ -374,9 +374,9 @@ describe("Account, Client Dashboard & Admin Experience", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("1.0.3")).toBeInTheDocument();
-      expect(screen.getByText("91.0 MB (95,453,540 bytes)")).toBeInTheDocument();
-      expect(screen.getByText("e16d1742f00a7f9e4dea9010c01849d8ec43243cdf2d03ad3aa047cb36cfe583")).toBeInTheDocument();
+      expect(screen.getByText("1.0.6")).toBeInTheDocument();
+      expect(screen.getByText("121.0 MB (126,833,835 bytes)")).toBeInTheDocument();
+      expect(screen.getByText("f9729901c59d88a0ff39333b1541771f9098da84d0db11198409926ed1b0b0c7")).toBeInTheDocument();
     });
 
     const downloadBtn = screen.getByRole("button", { name: /Download Windows Installer/i });

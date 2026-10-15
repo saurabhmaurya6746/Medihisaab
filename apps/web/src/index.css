@@ -58,6 +58,7 @@
   --modal-backdrop-bg: rgba(0, 0, 0, 0.75);
   --card-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
   --dropdown-bg: #1e293b;
+  --bg-panel: #1e293b;
   --dropdown-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
   --grid-cell-focus-bg: #0f233f;
   --badge-info-bg: rgba(56, 189, 248, 0.2);
@@ -121,6 +122,7 @@
   --modal-backdrop-bg: rgba(15, 23, 42, 0.5);
   --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
   --dropdown-bg: #ffffff;
+  --bg-panel: #ffffff;
   --dropdown-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
   --grid-cell-focus-bg: #f0f9ff;
   --badge-info-bg: #e0f2fe;
@@ -191,6 +193,8 @@ kbd {
 
 /* Headers & Navigation */
 .pos-header {
+  position: relative;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: space-between;
