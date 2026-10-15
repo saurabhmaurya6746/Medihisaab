@@ -1,11 +1,11 @@
 ; ==============================================================================
 ; Inno Setup 6 Script: Pharmacy POS (Offline Pharmacy Management System)
-; Version: 1.0.6
+; Version: 1.0.7
 ; Architecture: Windows 10 / 11 (x64)
 ; ==============================================================================
 
 #define MyAppName "MediHisaab"
-#define MyAppVersion "1.0.6"
+#define MyAppVersion "1.0.7"
 #define MyAppPublisher "Apex Health Technologies"
 #define MyAppURL "https://github.com/apex-health/pharmacy-pos"
 #define MyAppExeName "start-pharmacy.bat"
@@ -38,7 +38,7 @@ RestartApplications=no
 DisableProgramGroupPage=yes
 
 ; Version Info in Windows Explorer Properties
-VersionInfoVersion=1.0.6.0
+VersionInfoVersion=1.0.7.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=Offline Pharmacy Management System & POS
 VersionInfoCopyright=Copyright (C) 2026 {#MyAppPublisher}

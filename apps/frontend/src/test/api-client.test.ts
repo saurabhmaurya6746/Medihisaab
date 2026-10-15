@@ -80,9 +80,9 @@ describe("ApiClient - Envelope & Error Handling", () => {
       success: true,
       data: {
         download_url: "/api/v1/client/downloads/installer-windows/file",
-        filename: "MediHisaab-Setup-1.0.6.exe",
+        filename: "MediHisaab-Setup-1.0.7.exe",
         sha256: "f9729901c59d88a0ff39333b1541771f9098da84d0db11198409926ed1b0b0c7",
-        version: "1.0.6",
+        version: "1.0.7",
       },
       message: "Installer download request recorded.",
     };
@@ -97,7 +97,7 @@ describe("ApiClient - Envelope & Error Handling", () => {
     const res = await api.clientRecordDownloadRequest("installer-windows", "test-token");
     expect(res.download_url).toBe("/api/v1/client/downloads/installer-windows/file");
     expect(res.sha256).toBe("f9729901c59d88a0ff39333b1541771f9098da84d0db11198409926ed1b0b0c7");
-    expect(res.version).toBe("1.0.6");
+    expect(res.version).toBe("1.0.7");
   });
 
   it("handles network/CORS failures with explicit connection error and isNetworkError flag", async () => {
