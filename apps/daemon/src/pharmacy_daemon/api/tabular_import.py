@@ -53,8 +53,14 @@ def clear_staged_import(token: str) -> None:
 
 
 def normalize_key(key: str) -> str:
-    """Normalize a column header string: lowercase, remove non-alphanumeric symbols."""
-    return re.sub(r"[^a-z0-9]", "", str(key).strip().lower())
+    """Normalize headers while ignoring spreadsheet hints and required markers."""
+    value = str(key).strip().lower()
+    # Templates often include format hints, units, or a required marker, e.g.
+    # "Expiry Date (YYYY-MM or YYYY-MM-DD) *". These describe a field but are
+    # not part of its logical name.
+    value = re.sub(r"\([^)]*\)", " ", value)
+    value = re.sub(r"\s*\*\s*$", "", value)
+    return re.sub(r"[^a-z0-9]", "", value)
 
 
 def find_col(row: Dict[str, Any], candidates: List[str], default: Any = None) -> Any:

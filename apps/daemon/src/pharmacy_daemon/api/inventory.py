@@ -1371,7 +1371,9 @@ async def preview_opening_stock_import(
         expiry_norm = _normalize_expiry_date(expiry_raw)
         if not expiry_norm:
             errors.append(f"Invalid expiry date '{expiry_raw}'. Expected format YYYY-MM or YYYY-MM-DD.")
-            expiry_norm = today_str
+            # Keep invalid dates visibly blank in preview; today's date is only
+            # a validation fallback and must not be shown as if it came from the file.
+            expiry_norm = ""
         elif expiry_norm < today_str:
             errors.append(f"Batch expiry ({expiry_norm}) is in the past. Expired batches cannot be imported as active stock.")
 

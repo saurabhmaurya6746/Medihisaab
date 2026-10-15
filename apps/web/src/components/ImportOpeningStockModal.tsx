@@ -39,6 +39,9 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
     setSelectedFile(file);
     setErrorMessage(null);
     setExecuteResult(null);
+    // Do not leave the previous file's preview/commit action visible while the
+    // newly selected file is being analyzed.
+    setPreviewData(null);
     setIsPreviewLoading(true);
 
     try {
@@ -160,10 +163,10 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
           >
             <div>
               <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text-main)" }}>
-                Opening Stock Spreadsheet Template
+                Opening Stock Sample File & Template
               </div>
               <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 2 }}>
-                Requires Medicine Name/Code, Batch Number, Expiry Date (YYYY-MM), Packs, Pack Size, PTR, and MRP.
+                Download a ready-to-edit sample with example batches. Import its matching medicines first, then replace the sample quantities and batch details with your own.
               </div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
@@ -171,17 +174,17 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
                 type="button"
                 className="btn btn-secondary btn-sm"
                 onClick={() => downloadOpeningStockImportTemplate("xlsx")}
-                title="Download formatted Excel sample spreadsheet"
+                title="Download Excel sample file with example opening-stock batches"
               >
-                Download Excel (.xlsx)
+                Download Sample Excel (.xlsx)
               </button>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
                 onClick={() => downloadOpeningStockImportTemplate("csv")}
-                title="Download CSV sample file"
+                title="Download CSV sample file with example opening-stock batches"
               >
-                Download CSV
+                Download Sample CSV
               </button>
             </div>
           </div>
