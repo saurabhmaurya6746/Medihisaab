@@ -148,10 +148,10 @@ export const ImportMedicinesModal: React.FC<ImportMedicinesModalProps> = ({
           >
             <div>
               <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text-main)" }}>
-                Standard Catalog Template
+                Medicines Sample File & Template
               </div>
               <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 2 }}>
-                Use our pre-configured format with validation headers (Brand Name, Generic Salt, Dosage Form, Pack, Tax Slab).
+                Download a ready-to-edit sample with example medicines, then replace the examples with your catalog data. Existing medicines can be skipped or updated during import.
               </div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
@@ -159,17 +159,17 @@ export const ImportMedicinesModal: React.FC<ImportMedicinesModalProps> = ({
                 type="button"
                 className="btn btn-secondary btn-sm"
                 onClick={() => downloadMedicineImportTemplate("xlsx")}
-                title="Download formatted Excel sample spreadsheet"
+                title="Download Excel sample file with example medicine rows"
               >
-                Download Excel (.xlsx)
+                Download Sample Excel (.xlsx)
               </button>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
                 onClick={() => downloadMedicineImportTemplate("csv")}
-                title="Download CSV sample file"
+                title="Download CSV sample file with example medicine rows"
               >
-                Download CSV
+                Download Sample CSV
               </button>
             </div>
           </div>
