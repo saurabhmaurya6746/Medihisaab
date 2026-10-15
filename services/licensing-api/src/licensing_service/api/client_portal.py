@@ -54,6 +54,7 @@ from licensing_service.services.payment_service import submit_client_payment
 from licensing_service.services.renewal_service import create_renewal_request
 from licensing_service.services.setting_service import get_support_contacts
 from licensing_service.services.subscription_service import evaluate_subscription_status
+from licensing_service.release_manifest import get_latest_release_metadata, serve_release_installer
 
 router = APIRouter(prefix="/client", tags=["Client Portal"])
 
@@ -512,18 +513,9 @@ def list_client_payments(
 @router.get("/downloads", response_model=ApiEnvelope)
 def list_available_downloads(current_client: Client = Depends(get_current_client)):
     """List verified software installer and official documentation guides."""
+    latest_installer = get_latest_release_metadata()
     downloads = [
-        {
-            "id": "installer-windows",
-            "title": "MediHisaab Windows Installer (v1.0.0)",
-            "filename": "MediHisaab-Setup-1.0.0.exe",
-            "file_size": "91.0 MB (95,442,984 bytes)",
-            "os": "Windows 10 / 11 (64-bit)",
-            "download_url": "/MediHisaab-Setup-1.0.0.exe",
-            "sha256": "2e323e4b90768f866699b24c2aad6ba36f201e092acd65ba8cf6010b0f91c02f",
-            "is_installer": True,
-            "description": "Standalone offline-first MediHisaab installer with embedded Python, SQLite WAL engine, ESC/POS printing, and LAN multi-counter support.",
-        },
+        latest_installer,
         {
             "id": "doc-installation",
             "title": "Installation & First-Run Setup Guide",
@@ -567,7 +559,13 @@ def record_download_request(
     db: Session = Depends(get_db),
 ):
     """Record an authenticated client download request in audit log and return verified download metadata."""
+    latest_meta = get_latest_release_metadata()
     client_ip = request.client.host if request and request.client else "unknown"
+    is_installer = "installer" in item_id
+    filename = latest_meta["filename"] if is_installer else item_id
+    version = latest_meta["version"] if is_installer else "1.0.3"
+    sha256 = latest_meta["sha256"] if is_installer else ""
+
     log_audit_event(
         db=db,
         user_email=current_client.email,
@@ -579,22 +577,55 @@ def record_download_request(
             "client_code": current_client.client_code,
             "pharmacy_name": current_client.business_name,
             "item_id": item_id,
-            "filename": "MediHisaab-Setup-1.0.0.exe" if "installer" in item_id else item_id,
-            "version": "1.0.0",
+            "filename": filename,
+            "version": version,
+            "sha256": sha256,
         },
     )
     return ApiEnvelope(
         data={
             "item_id": item_id,
             "recorded": True,
-            "download_url": "/MediHisaab-Setup-1.0.0.exe",
-            "filename": "MediHisaab-Setup-1.0.0.exe",
-            "version": "1.0.0",
-            "sha256": "2e323e4b90768f866699b24c2aad6ba36f201e092acd65ba8cf6010b0f91c02f",
-            "file_size": "91.0 MB (95,442,984 bytes)",
+            "download_url": "/api/v1/client/downloads/installer-windows/file" if is_installer else f"/downloads/{filename}",
+            "direct_download_url": latest_meta["direct_download_url"] if is_installer else None,
+            "filename": filename,
+            "version": version,
+            "sha256": sha256,
+            "file_size": latest_meta["file_size"] if is_installer else "N/A",
         },
         message="Installer download request recorded.",
     )
+
+
+@router.get("/downloads/installer-windows/file")
+def download_installer_binary(
+    request: Request,
+    current_client: Client = Depends(get_current_client),
+    db: Session = Depends(get_db),
+):
+    """Authenticated client endpoint to download official Windows installer.
+
+    Streams the verified binary directly or serves from local dist-release/ if present.
+    Logs audit event for each authenticated binary download.
+    """
+    latest_meta = get_latest_release_metadata()
+    client_ip = request.client.host if request and request.client else "unknown"
+    log_audit_event(
+        db=db,
+        user_email=current_client.email,
+        action="CLIENT_INSTALLER_DOWNLOAD_SERVED",
+        entity_type="DOWNLOAD",
+        entity_id=latest_meta["id"],
+        ip_address=client_ip,
+        metadata={
+            "client_code": current_client.client_code,
+            "pharmacy_name": current_client.business_name,
+            "filename": latest_meta["filename"],
+            "version": latest_meta["version"],
+            "sha256": latest_meta["sha256"],
+        },
+    )
+    return serve_release_installer(latest_meta["filename"])
 
 
 # 7. IN-APP LICENSE RENEWAL REQUESTS

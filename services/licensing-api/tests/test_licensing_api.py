@@ -1477,16 +1477,17 @@ def test_scenario_34_download_request_audit_and_gating(client, db_session):
     assert res_list.status_code == 200
     downloads = res_list.json()["data"]
     installer = next(d for d in downloads if d["id"] == "installer-windows")
-    assert installer["filename"] == "MediHisaab-Setup-1.0.0.exe"
-    assert "95,442,984 bytes" in installer["file_size"]
-    assert installer["sha256"] == "2e323e4b90768f866699b24c2aad6ba36f201e092acd65ba8cf6010b0f91c02f"
+    assert installer["filename"] == "MediHisaab-Setup-1.0.3.exe"
+    assert "95,453,540 bytes" in installer["file_size"]
+    assert installer["sha256"] == "e16d1742f00a7f9e4dea9010c01849d8ec43243cdf2d03ad3aa047cb36cfe583"
 
     # 4. Request download audit event
     res_req = client.post("/api/v1/client/downloads/installer-windows/request", headers=client_headers)
     assert res_req.status_code == 200
     req_data = res_req.json()["data"]
     assert req_data["recorded"] is True
-    assert req_data["filename"] == "MediHisaab-Setup-1.0.0.exe"
+    assert req_data["filename"] == "MediHisaab-Setup-1.0.3.exe"
+    assert req_data["download_url"] == "/api/v1/client/downloads/installer-windows/file"
 
     # 5. Verify audit event was stored in database
     audit = (
@@ -1498,6 +1499,29 @@ def test_scenario_34_download_request_audit_and_gating(client, db_session):
     assert audit is not None
     assert audit.entity_id == "installer-windows"
     assert test_client.client_code in audit.metadata_json
+
+    # 6. Verify authenticated binary download endpoint gating and delivery
+    unauth_binary = client.get("/api/v1/client/downloads/installer-windows/file")
+    assert unauth_binary.status_code == 401
+
+    auth_binary = client.get(f"/api/v1/client/downloads/installer-windows/file?token={token}")
+    assert auth_binary.status_code == 200
+    assert "application/vnd.microsoft.portable-executable" in auth_binary.headers.get("content-type", "")
+    assert 'attachment; filename="MediHisaab-Setup-1.0.3.exe"' in auth_binary.headers.get("content-disposition", "")
+    assert len(auth_binary.content) > 0
+
+    # Also test public root installer route
+    root_binary = client.get("/MediHisaab-Setup-1.0.3.exe")
+    assert root_binary.status_code == 200
+    assert "application/vnd.microsoft.portable-executable" in root_binary.headers.get("content-type", "")
+    assert len(root_binary.content) > 0
+
+    audit_served = (
+        db_session.query(AuditEvent)
+        .filter(AuditEvent.action == "CLIENT_INSTALLER_DOWNLOAD_SERVED", AuditEvent.user_email == test_client.email)
+        .first()
+    )
+    assert audit_served is not None
 
 
 def test_scenario_35_frontend_spa_routes_and_api_isolation(client):

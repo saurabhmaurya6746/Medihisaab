@@ -3,12 +3,14 @@
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from licensing_service import __version__
+from licensing_service.release_manifest import serve_release_installer
 from licensing_service.api import (
     audit,
     auth,
@@ -138,27 +140,19 @@ async def serve_robots():
     return JSONResponse({"message": "Robots not found"}, status_code=404)
 
 
+@app.get("/MediHisaab-Setup-1.0.3.exe", include_in_schema=False)
 @app.get("/MediHisaab-Setup-1.0.0.exe", include_in_schema=False)
+@app.get("/downloads/MediHisaab-Setup-1.0.3.exe", include_in_schema=False)
 @app.get("/downloads/MediHisaab-Setup-1.0.0.exe", include_in_schema=False)
+@app.get("/download/MediHisaab-Setup-1.0.3.exe", include_in_schema=False)
 @app.get("/download/MediHisaab-Setup-1.0.0.exe", include_in_schema=False)
-async def serve_installer():
-    """Serve Windows installer binary when available, or clear 404 with guidance."""
-    installer_path = DIST_RELEASE_DIR / "MediHisaab-Setup-1.0.0.exe"
-    if installer_path.is_file():
-        return FileResponse(
-            str(installer_path),
-            filename="MediHisaab-Setup-1.0.0.exe",
-            media_type="application/vnd.microsoft.portable-executable",
-        )
-    return JSONResponse(
-        {
-            "status": "UNAVAILABLE",
-            "message": "The Windows installer binary is currently being packaged or unavailable on this server instance.",
-            "file": "MediHisaab-Setup-1.0.0.exe",
-            "support": "support@apexhealth.com",
-        },
-        status_code=status.HTTP_404_NOT_FOUND,
-    )
+@app.get("/downloads/{filename:path}", include_in_schema=False)
+async def serve_installer(filename: Optional[str] = None, request: Request = None):
+    """Serve Windows installer binary when available, falling back to verified release asset streaming."""
+    target = filename
+    if not target and request:
+        target = request.url.path.strip("/").split("/")[-1]
+    return serve_release_installer(target)
 
 
 @app.get("/", include_in_schema=False)

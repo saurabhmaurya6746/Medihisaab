@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
 from passlib.context import CryptContext
@@ -177,19 +177,21 @@ def get_current_vendor_user(
 
 def get_current_client(
     auth: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+    token: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ) -> Any:
     """FastAPI dependency to retrieve currently authenticated customer client."""
     from licensing_service.db.models import Client
 
-    if not auth or not auth.credentials:
+    raw_token = auth.credentials if (auth and auth.credentials) else token
+    if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Client authentication credentials are required.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    payload = decode_access_token(auth.credentials)
+    payload = decode_access_token(raw_token)
     if payload.get("type") != "client":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

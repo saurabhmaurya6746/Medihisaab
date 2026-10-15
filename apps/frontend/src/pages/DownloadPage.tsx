@@ -5,8 +5,20 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { isValidInstallerUrl, NOT_CONFIGURED, releaseConfig } from "@/config/site";
 import { useSession } from "@/lib/auth";
-import { api } from "@/lib/api";
+import { api, getApiBaseUrl } from "@/lib/api";
 import { usePageTitle } from "@/hooks/use-page-title";
+
+function buildAuthenticatedDownloadUrl(path: string, token: string): string {
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    const url = new URL(path);
+    url.searchParams.set("token", token);
+    return url.toString();
+  }
+  const apiBase = getApiBaseUrl();
+  const cleanPath = path.startsWith("/api/v1") ? path.slice(7) : path;
+  const normalizedPath = cleanPath.startsWith("/") ? cleanPath : `/${cleanPath}`;
+  return `${apiBase}${normalizedPath}?token=${encodeURIComponent(token)}`;
+}
 
 export function DownloadPage() {
   usePageTitle("Download for Windows — MediHisaab");
@@ -14,12 +26,51 @@ export function DownloadPage() {
   const { ready, session, token } = useSession();
   const navigate = useNavigate();
   const [downloading, setDownloading] = useState(false);
+  const [releaseInfo, setReleaseInfo] = useState({
+    version: releaseConfig.version,
+    fileSize: releaseConfig.fileSize,
+    installerUrl: releaseConfig.installerUrl,
+    sha256: releaseConfig.sha256,
+    releaseDate: releaseConfig.releaseDate,
+    requirements: releaseConfig.requirements,
+    directDownloadUrl: "https://github.com/saurabhmaurya6746/Medihisaab/releases/download/v1.0.3/MediHisaab-Setup-1.0.3.exe",
+    filename: "MediHisaab-Setup-1.0.3.exe",
+  });
 
   useEffect(() => {
     if (ready && !session) {
       navigate("/account?next=/download", { replace: true });
     }
   }, [ready, session, navigate]);
+
+  // Fetch real-time release artifact metadata directly from the licensing server
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    api.clientGetDownloads(token)
+      .then((downloads) => {
+        if (!active) return;
+        const installerItem = downloads.find((d) => d.id === "installer-windows" || d.is_installer);
+        if (installerItem) {
+          setReleaseInfo((prev) => ({
+            ...prev,
+            version: installerItem.version || prev.version,
+            fileSize: installerItem.file_size || prev.fileSize,
+            installerUrl: installerItem.download_url || prev.installerUrl,
+            sha256: installerItem.sha256 || prev.sha256,
+            releaseDate: installerItem.release_date || prev.releaseDate,
+            directDownloadUrl: installerItem.direct_download_url || prev.directDownloadUrl,
+            filename: installerItem.filename || prev.filename,
+          }));
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch release metadata from licensing server:", err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token]);
 
   if (!ready || !session) {
     return (
@@ -29,29 +80,34 @@ export function DownloadPage() {
     );
   }
 
-  const r = releaseConfig;
-  const hasInstaller = isValidInstallerUrl(r.installerUrl);
+  const r = releaseInfo;
+  const hasInstaller = isValidInstallerUrl(r.installerUrl) || Boolean(r.directDownloadUrl);
 
   const handleDownloadClick = async () => {
     if (!token) return;
     try {
       setDownloading(true);
       // Record download request in the server audit log before starting delivery
-      await api.clientRecordDownloadRequest("installer-windows", token);
+      const record = await api.clientRecordDownloadRequest("installer-windows", token);
       toast.success("Download request recorded", {
-        description: "Starting MediHisaab Windows installer download…",
+        description: `Starting MediHisaab ${record.version || r.version} download…`,
       });
 
-      // Initiate file download
+      // Stream binary with authentication token attached
+      const downloadPath = record.download_url || "/api/v1/client/downloads/installer-windows/file";
+      const fullDownloadUrl = buildAuthenticatedDownloadUrl(downloadPath, token);
+      const filename = record.filename || r.filename || "MediHisaab-Setup-1.0.3.exe";
+
       const link = document.createElement("a");
-      link.href = r.installerUrl!;
-      link.download = "MediHisaab-Setup-1.0.0.exe";
+      link.href = fullDownloadUrl;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
     } catch (err: any) {
-      toast.error(err.message || "Failed to record download request. Downloading anyway…");
-      window.location.href = r.installerUrl!;
+      toast.error(err.message || "Failed to record download request. Downloading from direct mirror…");
+      const fallbackUrl = r.directDownloadUrl || "https://github.com/saurabhmaurya6746/Medihisaab/releases/download/v1.0.3/MediHisaab-Setup-1.0.3.exe";
+      window.location.href = fallbackUrl;
     } finally {
       setDownloading(false);
     }

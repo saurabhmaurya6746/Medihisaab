@@ -164,10 +164,13 @@ export interface DownloadItem {
   id: string;
   title: string;
   filename: string;
+  version?: string;
   file_size: string;
   os: string;
   download_url: string;
+  direct_download_url?: string;
   sha256: string;
+  release_date?: string;
   is_installer: boolean;
   description: string;
 }
@@ -440,7 +443,16 @@ class ApiClient {
   async clientRecordDownloadRequest(
     itemId: string,
     token: string
-  ): Promise<{ download_url: string; filename: string; sha256: string; version: string }> {
+  ): Promise<{
+    item_id?: string;
+    recorded?: boolean;
+    download_url: string;
+    direct_download_url?: string;
+    filename: string;
+    sha256: string;
+    version: string;
+    file_size?: string;
+  }> {
     return this.request(`/client/downloads/${itemId}/request`, {
       method: "POST",
     }, token);
