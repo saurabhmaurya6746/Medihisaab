@@ -73,9 +73,14 @@ class LicenseSigner:
 
         # 1. Environment variable LICENSE_PRIVATE_KEY_PEM (Render Web Service production)
         if settings.LICENSE_PRIVATE_KEY_PEM:
-            key_data = settings.LICENSE_PRIVATE_KEY_PEM.encode("utf-8")
-            self._private_key = serialization.load_pem_private_key(key_data, password=None)  # type: ignore
-            return self._private_key
+            pem_str = settings.LICENSE_PRIVATE_KEY_PEM.strip().strip("'\"")
+            if "\\n" in pem_str:
+                pem_str = pem_str.replace("\\n", "\n")
+            try:
+                self._private_key = serialization.load_pem_private_key(pem_str.encode("utf-8"), password=None)  # type: ignore
+                return self._private_key
+            except Exception as pem_err:
+                logger.error("Failed to parse LICENSE_PRIVATE_KEY_PEM from environment: %s", pem_err)
 
         # 2. Configured file path
         if settings.LICENSE_PRIVATE_KEY_PATH:
