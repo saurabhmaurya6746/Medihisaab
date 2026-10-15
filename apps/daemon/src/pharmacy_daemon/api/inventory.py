@@ -2,10 +2,11 @@
 
 from datetime import date, datetime, timedelta, timezone
 import math
+import re
 import sqlite3
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 
 from .dependencies import get_current_user, get_db, require_role, require_write_role
 from .schemas import (
@@ -18,12 +19,25 @@ from .schemas import (
     LowStockMedicineResponse,
     MedicineBatchResponse,
     MedicineStockSummaryResponse,
+    OpeningStockImportExecuteRequest,
+    OpeningStockImportExecuteResponse,
+    OpeningStockImportPreviewResponse,
+    OpeningStockImportRowSchema,
     PaginatedData,
     StockAdjustmentResponse,
     SuccessResponse,
     SupplierReturnDumpGroupResponse,
     UpdateWantBookStatusRequest,
     WantBookResponse,
+)
+from .tabular_import import (
+    clear_staged_import,
+    find_col,
+    generate_csv_template,
+    generate_xlsx_template,
+    get_staged_import,
+    parse_tabular_upload,
+    save_staged_import,
 )
 from ..security.roles import UserRole
 
@@ -1202,3 +1216,431 @@ def delete_want_book_item(
         data={"deleted_id": id},
         message=f"Want-Book item #{id} removed successfully.",
     )
+
+
+# ==============================================================================
+# 5. OPENING STOCK & BATCHES BULK IMPORT (CSV & EXCEL)
+# ==============================================================================
+
+OPENING_STOCK_TEMPLATE_HEADERS = [
+    "Medicine Name *",
+    "Batch Number *",
+    "Expiry Date (YYYY-MM or YYYY-MM-DD) *",
+    "Quantity (Packs) *",
+    "Pack Size",
+    "Purchase Rate (PTR ₹) *",
+    "MRP (₹) *",
+    "Supplier Name",
+]
+
+OPENING_STOCK_SAMPLE_ROWS = [
+    ["Augmentin 625", "BTH-AUG-991", "2027-08-31", 50, 10, 140.50, 205.00, "City Pharma Distributors"],
+    ["Dolo 650", "DL-2026-44", "2027-12-31", 100, 15, 22.00, 31.50, "Apex Medical Supplies"],
+    ["Azithral 500", "AZ-8812", "2026-11-30", 30, 5, 85.00, 119.00, "Global Health Logistics"],
+    ["Benadryl Cough Syrup", "BEN-091", "2027-03-31", 25, 1, 90.00, 130.00, "City Pharma Distributors"],
+]
+
+
+def _normalize_expiry_date(raw_val: Any) -> Optional[str]:
+    """Parse various user/spreadsheet date formats into standard ISO YYYY-MM-DD."""
+    if isinstance(raw_val, (datetime, date)):
+        return raw_val.strftime("%Y-%m-%d")
+    s = str(raw_val).strip()
+    # YYYY-MM-DD
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+        return s
+    # YYYY-MM -> end of month
+    if re.match(r"^\d{4}-\d{2}$", s):
+        parts = s.split("-")
+        y, m = int(parts[0]), int(parts[1])
+        if 1 <= m <= 12:
+            import calendar
+            last_day = calendar.monthrange(y, m)[1]
+            return f"{y:04d}-{m:02d}-{last_day:02d}"
+    # MM/YYYY
+    if re.match(r"^\d{1,2}/\d{4}$", s):
+        parts = s.split("/")
+        m, y = int(parts[0]), int(parts[1])
+        if 1 <= m <= 12:
+            import calendar
+            last_day = calendar.monthrange(y, m)[1]
+            return f"{y:04d}-{m:02d}-{last_day:02d}"
+    # DD/MM/YYYY
+    if re.match(r"^\d{1,2}/\d{1,2}/\d{4}$", s):
+        parts = s.split("/")
+        d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+        if 1 <= m <= 12:
+            return f"{y:04d}-{m:02d}-{d:02d}"
+    return None
+
+
+@router.get("/opening-stock/import/template", dependencies=[read_guard])
+def download_opening_stock_template(format: str = Query("csv", description="csv or xlsx")):
+    """Download clean sample template for opening stock and batch inventory import."""
+    fmt = format.strip().lower()
+    if fmt == "xlsx":
+        content = generate_xlsx_template("Opening Stock", OPENING_STOCK_TEMPLATE_HEADERS, OPENING_STOCK_SAMPLE_ROWS)
+        return Response(
+            content=content,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=medihisaab_opening_stock_sample_template.xlsx"},
+        )
+    content = generate_csv_template(OPENING_STOCK_TEMPLATE_HEADERS, OPENING_STOCK_SAMPLE_ROWS)
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=medihisaab_opening_stock_sample_template.csv"},
+    )
+
+
+@router.post("/opening-stock/import-preview", response_model=SuccessResponse[OpeningStockImportPreviewResponse], dependencies=[write_audit_guard])
+async def preview_opening_stock_import(
+    file: UploadFile = File(...),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Parse and validate CSV/Excel opening stock file, validating medicine catalog and batch dates."""
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The uploaded file is empty.",
+        )
+
+    try:
+        raw_rows = parse_tabular_upload(file_bytes, file.filename or "upload.csv")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to read file: {str(exc)}",
+        )
+
+    if not raw_rows:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The file does not contain any valid data rows.",
+        )
+
+    cursor = db.cursor()
+    # Cache all active medicines (by lowercase name and lowercase code)
+    cursor.execute("SELECT id, brand_name, medicine_code, pack_size, is_active FROM medicines;")
+    med_rows = cursor.fetchall()
+    med_by_name = {m["brand_name"].strip().lower(): m for m in med_rows}
+    med_by_code = {m["medicine_code"].strip().lower(): m for m in med_rows if m["medicine_code"]}
+
+    # Cache existing batches for duplicate check
+    cursor.execute("SELECT id, medicine_id, batch_number, current_quantity FROM medicine_batches;")
+    existing_batches = {(b["medicine_id"], b["batch_number"].strip().lower()): b for b in cursor.fetchall()}
+    cursor.close()
+
+    preview_rows: List[OpeningStockImportRowSchema] = []
+    today_str = date.today().isoformat()
+    seen_in_file: set = set()
+
+    for idx, r in enumerate(raw_rows, start=1):
+        errors: List[str] = []
+
+        med_name_raw = find_col(r, ["Medicine Name", "Brand Name", "Medicine", "Item Name", "Product Name"])
+        med_name = str(med_name_raw).strip() if med_name_raw is not None else ""
+        med_code_raw = find_col(r, ["Medicine Code", "Code", "SKU", "Item Code"])
+        med_code = str(med_code_raw).strip() if med_code_raw is not None else None
+
+        if not med_name and not med_code:
+            errors.append("Medicine Name or Code is required.")
+
+        # Resolve medicine in master catalog
+        matched_med = None
+        if med_name and med_name.lower() in med_by_name:
+            matched_med = med_by_name[med_name.lower()]
+        elif med_code and med_code.lower() in med_by_code:
+            matched_med = med_by_code[med_code.lower()]
+
+        medicine_id = matched_med["id"] if matched_med else None
+        if not matched_med:
+            errors.append(f"Medicine '{med_name or med_code}' not found in catalog. Please add it to medicines master first.")
+        elif not matched_med["is_active"]:
+            errors.append(f"Medicine '{matched_med['brand_name']}' is deactivated.")
+
+        # Batch number
+        batch_raw = find_col(r, ["Batch Number", "Batch", "Batch No", "Lot Number", "Lot"])
+        batch_number = str(batch_raw).strip() if batch_raw is not None else ""
+        if not batch_number:
+            errors.append("Batch Number is required.")
+
+        # Expiry date
+        expiry_raw = find_col(r, ["Expiry Date", "Expiry", "Exp Date", "Exp"])
+        expiry_norm = _normalize_expiry_date(expiry_raw)
+        if not expiry_norm:
+            errors.append(f"Invalid expiry date '{expiry_raw}'. Expected format YYYY-MM or YYYY-MM-DD.")
+            expiry_norm = today_str
+        elif expiry_norm < today_str:
+            errors.append(f"Batch expiry ({expiry_norm}) is in the past. Expired batches cannot be imported as active stock.")
+
+        # Pack size
+        default_pack = matched_med["pack_size"] if matched_med else 1
+        pack_size_raw = find_col(r, ["Pack Size", "Pack", "Units per pack"], default_pack)
+        try:
+            match = re.search(r"\d+", str(pack_size_raw))
+            pack_size = int(match.group(0)) if match else default_pack
+            if pack_size < 1:
+                errors.append("Pack size must be at least 1 unit.")
+                pack_size = 1
+        except Exception:
+            pack_size = default_pack
+
+        # Quantity in packs
+        qty_raw = find_col(r, ["Quantity (Packs)", "Quantity", "Packs", "Qty", "Stock Packs"], 0)
+        try:
+            match = re.search(r"\d+", str(qty_raw))
+            quantity = int(match.group(0)) if match else 0
+            if quantity <= 0:
+                errors.append("Quantity must be at least 1 pack.")
+                quantity = 0
+        except Exception:
+            errors.append("Invalid quantity number.")
+            quantity = 0
+
+        # Purchase Rate PTR
+        ptr_raw = find_col(r, ["Purchase Rate (PTR ₹)", "Purchase Rate", "PTR", "Cost Price", "Rate"], 0.0)
+        try:
+            ptr_rupees = max(0.0, float(ptr_raw))
+            ptr_paise = int(round(ptr_rupees * 100))
+        except Exception:
+            errors.append("Invalid Purchase Rate (PTR).")
+            ptr_rupees = 0.0
+            ptr_paise = 0
+
+        # MRP
+        mrp_raw = find_col(r, ["MRP (₹)", "MRP", "Maximum Retail Price"], 0.0)
+        try:
+            mrp_rupees = max(0.0, float(mrp_raw))
+            mrp_paise = int(round(mrp_rupees * 100))
+            if mrp_paise < ptr_paise:
+                errors.append(f"MRP (₹{mrp_rupees:.2f}) cannot be less than Purchase Rate PTR (₹{ptr_rupees:.2f}).")
+        except Exception:
+            errors.append("Invalid MRP.")
+            mrp_rupees = 0.0
+            mrp_paise = 0
+
+        supplier_raw = find_col(r, ["Supplier Name", "Supplier", "Distributor", "Vendor"])
+        supplier_name = str(supplier_raw).strip() if supplier_raw is not None else None
+
+        # Duplicate checking
+        status_label = "NEW"
+        existing_batch_id = None
+        existing_qty = None
+
+        if medicine_id and batch_number:
+            key = (medicine_id, batch_number.lower())
+            if key in seen_in_file:
+                errors.append(f"Duplicate batch '{batch_number}' for this medicine appears multiple times in file.")
+            seen_in_file.add(key)
+
+            if key in existing_batches:
+                status_label = "DUPLICATE"
+                eb = existing_batches[key]
+                existing_batch_id = eb["id"]
+                existing_qty = eb["current_quantity"]
+
+        if errors:
+            status_label = "INVALID"
+
+        preview_rows.append(
+            OpeningStockImportRowSchema(
+                row_number=idx,
+                medicine_name=matched_med["brand_name"] if matched_med else med_name,
+                medicine_code=med_code or (matched_med["medicine_code"] if matched_med else None),
+                medicine_id=medicine_id,
+                batch_number=batch_number,
+                expiry_date=expiry_norm,
+                quantity=max(1, quantity),
+                pack_size=pack_size,
+                purchase_rate_rupees=ptr_rupees,
+                purchase_rate_paise=ptr_paise,
+                mrp_rupees=mrp_rupees,
+                mrp_paise=mrp_paise,
+                supplier_name=supplier_name,
+                status=status_label,
+                existing_batch_id=existing_batch_id,
+                existing_quantity=existing_qty,
+                errors=errors,
+            )
+        )
+
+    total_rows = len(preview_rows)
+    valid_rows = sum(1 for r in preview_rows if r.status in ("NEW", "DUPLICATE") and not r.errors)
+    duplicate_rows = sum(1 for r in preview_rows if r.status == "DUPLICATE" and not r.errors)
+    error_rows = sum(1 for r in preview_rows if r.status == "INVALID" or r.errors)
+
+    staging_token = save_staged_import(
+        "OPENING_STOCK",
+        [r.model_dump() for r in preview_rows],
+    )
+
+    return SuccessResponse(
+        data=OpeningStockImportPreviewResponse(
+            staging_token=staging_token,
+            total_rows=total_rows,
+            valid_rows=valid_rows,
+            duplicate_rows=duplicate_rows,
+            error_rows=error_rows,
+            rows=preview_rows,
+        )
+    )
+
+
+@router.post("/opening-stock/import-execute", response_model=SuccessResponse[OpeningStockImportExecuteResponse], dependencies=[write_audit_guard])
+def execute_opening_stock_import(
+    payload: OpeningStockImportExecuteRequest,
+    current_user: dict = Depends(get_current_user),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Commit verified opening stock rows into medicine_batches and append-only inventory ledger."""
+    rows_to_process: List[Dict[str, Any]] = []
+
+    if payload.staging_token:
+        session = get_staged_import(payload.staging_token)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Staging session expired or not found. Please upload the file again to preview.",
+            )
+        rows_to_process = session["rows"]
+    elif payload.rows:
+        rows_to_process = [r.model_dump() for r in payload.rows]
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either staging_token or rows array must be provided.",
+        )
+
+    policy = payload.duplicate_policy.strip().upper()
+    if policy not in ("SKIP", "MERGE"):
+        policy = "SKIP"
+
+    now_str = datetime.now(timezone.utc).isoformat()
+    inserted_batches = 0
+    merged_batches = 0
+    skipped_batches = 0
+    failed_batches = 0
+    total_units_added = 0
+
+    cursor = db.cursor()
+    cursor.execute("BEGIN IMMEDIATE;")
+    try:
+        for r in rows_to_process:
+            if r.get("errors") or r.get("status") == "INVALID":
+                failed_batches += 1
+                continue
+
+            medicine_id = r.get("medicine_id")
+            batch_num = str(r.get("batch_number", "")).strip()
+            exp_date = r.get("expiry_date")
+            pack_size = max(1, int(r.get("pack_size", 1)))
+            packs_qty = max(0, int(r.get("quantity", 0)))
+            base_units_added = packs_qty * pack_size
+            ptr_paise = int(r.get("purchase_rate_paise", 0))
+            mrp_paise = int(r.get("mrp_paise", 0))
+
+            if not medicine_id or not batch_num or not exp_date or base_units_added <= 0:
+                failed_batches += 1
+                continue
+
+            # Check if batch exists in database
+            cursor.execute(
+                "SELECT id, current_quantity FROM medicine_batches WHERE medicine_id = ? AND batch_number = ?;",
+                (medicine_id, batch_num),
+            )
+            existing = cursor.fetchone()
+
+            if existing:
+                if policy == "SKIP":
+                    skipped_batches += 1
+                    continue
+                # MERGE into existing batch
+                batch_id = existing["id"]
+                new_current_qty = existing["current_quantity"] + base_units_added
+                cursor.execute(
+                    """
+                    UPDATE medicine_batches SET
+                        current_quantity = ?,
+                        mrp_paise = ?,
+                        purchase_rate_paise = ?,
+                        pack_size = ?,
+                        expiry_date = ?,
+                        is_active = 1,
+                        updated_at = ?
+                    WHERE id = ?;
+                    """,
+                    (new_current_qty, mrp_paise, ptr_paise, pack_size, exp_date, now_str, batch_id),
+                )
+                ledger_bal = new_current_qty
+                merged_batches += 1
+            else:
+                # INSERT new batch
+                cursor.execute(
+                    """
+                    INSERT INTO medicine_batches (
+                        medicine_id, batch_number, expiry_date, mrp_paise, purchase_rate_paise, pack_size,
+                        current_quantity, reserved_quantity, is_active, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?);
+                    """,
+                    (medicine_id, batch_num, exp_date, mrp_paise, ptr_paise, pack_size, base_units_added, now_str, now_str),
+                )
+                batch_id = cursor.lastrowid
+                ledger_bal = base_units_added
+                inserted_batches += 1
+
+            total_units_added += base_units_added
+
+            # Append audit ledger entry
+            cursor.execute(
+                """
+                INSERT INTO inventory_ledger (
+                    medicine_id, batch_id, transaction_type, quantity_change, quantity_balance,
+                    reference_type, reference_id, notes, user_id, created_at
+                ) VALUES (?, ?, 'ADJUSTMENT', ?, ?, 'OPENING_STOCK', ?, ?, ?, ?);
+                """,
+                (
+                    medicine_id,
+                    batch_id,
+                    base_units_added,
+                    ledger_bal,
+                    batch_id,
+                    f"Opening stock imported (Batch {batch_num}, {packs_qty} packs)",
+                    current_user["id"],
+                    now_str,
+                ),
+            )
+
+        cursor.execute("COMMIT;")
+    except Exception as exc:
+        cursor.execute("ROLLBACK;")
+        cursor.close()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Opening stock import failed: {str(exc)}",
+        )
+    finally:
+        cursor.close()
+
+    if payload.staging_token:
+        clear_staged_import(payload.staging_token)
+
+    summary_msg = (
+        f"Opening stock imported: {inserted_batches} new batch(es), "
+        f"{merged_batches} merged, {skipped_batches} skipped, {failed_batches} invalid. "
+        f"Total stock added: {total_units_added} unit(s)."
+    )
+
+    return SuccessResponse(
+        data=OpeningStockImportExecuteResponse(
+            success=True,
+            inserted_batches=inserted_batches,
+            merged_batches=merged_batches,
+            skipped_batches=skipped_batches,
+            failed_batches=failed_batches,
+            total_units_added=total_units_added,
+            message=summary_msg,
+        )
+    )
+

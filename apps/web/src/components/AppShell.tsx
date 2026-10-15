@@ -50,43 +50,55 @@ function formatLicenseDate(value: string): string {
     : parsed.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function getLicenseTermSummary(license: LicenseStatusInfo): { label: string; details: string } {
-  const isTrial = license.status === "TRIAL" || ["TRIAL", "TRIALING", "EVALUATION"].includes(license.edition.toUpperCase());
-  const daysLeft = license.remaining_days;
-  const remaining = daysLeft === null || daysLeft === undefined
-    ? null
-    : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left`;
-  const expires = license.expiry_date ? formatLicenseDate(license.expiry_date) : null;
-
+function getLicenseBadge(license: LicenseStatusInfo): { badge: string; tooltip: string } {
   if (license.status === "UNLICENSED_COMMUNITY") {
-    return { label: "Community edition", details: "No expiry date" };
+    return {
+      badge: "Community Edition",
+      tooltip: "MediHisaab Community Edition · Basic offline POS",
+    };
+  }
+
+  const isTrial =
+    license.status === "TRIAL" ||
+    ["TRIAL", "TRIALING", "EVALUATION"].includes((license.edition || "").toUpperCase());
+
+  const daysLeft = license.remaining_days;
+  const remainingStr =
+    daysLeft !== null && daysLeft !== undefined
+      ? `${daysLeft} day${daysLeft === 1 ? "" : "s"} left`
+      : null;
+
+  if (license.status === "EXPIRED") {
+    return {
+      badge: isTrial ? "Trial Expired" : "License Expired",
+      tooltip: `Expired on ${license.expiry_date ? formatLicenseDate(license.expiry_date) : "N/A"}. Click to contact admin and renew.`,
+    };
   }
 
   if (license.status === "GRACE_PERIOD" || license.grace_period_active) {
     return {
-      label: `Grace period${remaining ? ` · ${remaining}` : ""}`,
-      details: expires ? `Expired ${expires}` : "Please renew your license",
+      badge: `Grace Period${remainingStr ? ` · ${remainingStr}` : ""}`,
+      tooltip: `License expired on ${license.expiry_date ? formatLicenseDate(license.expiry_date) : "N/A"}. Running in grace period.`,
+    };
+  }
+
+  if (isTrial) {
+    return {
+      badge: remainingStr ? `Free Trial · ${remainingStr}` : "Free Trial",
+      tooltip: `Trial started on ${formatLicenseDate(license.activation_date)} and expires on ${license.expiry_date ? formatLicenseDate(license.expiry_date) : "N/A"}.`,
     };
   }
 
   if (!license.expiry_date) {
     return {
-      label: isTrial ? "Free trial · no expiry date" : "Purchased license · perpetual",
-      details: license.edition || "COMMERCIAL",
+      badge: `${license.edition || "Commercial"} · Perpetual`,
+      tooltip: "Commercial license with perpetual offline rights.",
     };
   }
 
-  const start = new Date(`${license.activation_date}T00:00:00Z`).getTime();
-  const end = new Date(`${license.expiry_date}T00:00:00Z`).getTime();
-  const totalDays = Number.isFinite(start) && Number.isFinite(end) && end >= start
-    ? Math.round((end - start) / 86_400_000)
-    : null;
-  const term = totalDays === null ? "" : `${totalDays}-day term`;
-  const kind = isTrial ? "Free trial" : "Purchased license";
-
   return {
-    label: [kind, term, remaining].filter(Boolean).join(" · "),
-    details: `Started ${formatLicenseDate(license.activation_date)} · Expires ${expires}`,
+    badge: remainingStr ? `Active · ${remainingStr}` : "Active License",
+    tooltip: `Valid until ${formatLicenseDate(license.expiry_date)}.`,
   };
 }
 
@@ -99,11 +111,13 @@ export const AppShell: React.FC = () => {
   const [showShortcutsModal, setShowShortcutsModal] = useState<boolean>(false);
   const [showContactAdminModal, setShowContactAdminModal] = useState<boolean>(false);
   const [isMoreOpen, setIsMoreOpen] = useState<boolean>(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<string>("");
   const [licenseInfo, setLicenseInfo] = useState<LicenseStatusInfo | null>(null);
   const [licenseStatusUnavailable, setLicenseStatusUnavailable] = useState(false);
 
   const moreDropdownRef = useRef<HTMLDivElement>(null);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getLicenseStatus()
@@ -138,7 +152,7 @@ export const AppShell: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Close "More" dropdown when clicking outside
+  // Close "More" and Profile dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
@@ -147,14 +161,20 @@ export const AppShell: React.FC = () => {
       ) {
         setIsMoreOpen(false);
       }
+      if (
+        profileDropdownRef.current &&
+        !profileDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsProfileMenuOpen(false);
+      }
     };
-    if (isMoreOpen) {
+    if (isMoreOpen || isProfileMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isMoreOpen]);
+  }, [isMoreOpen, isProfileMenuOpen]);
 
   // Automatically switch tab away if the active module gets disabled
   useEffect(() => {
@@ -302,6 +322,20 @@ export const AppShell: React.FC = () => {
 
   const isMoreTabActive = MORE_TABS.includes(activeTab);
 
+  const sanitizedStoreName = React.useMemo(() => {
+    if (!storeName) return "MediHisaab Pharmacy";
+    const lower = storeName.toLowerCase().trim();
+    if (lower.includes("trial") || lower === "medihisaab trial") {
+      if (licenseInfo?.client_name && !licenseInfo.client_name.toLowerCase().includes("trial")) {
+        return licenseInfo.client_name;
+      }
+      return "MediHisaab Pharmacy";
+    }
+    return storeName;
+  }, [storeName, licenseInfo]);
+
+  const licenseBadgeInfo = licenseInfo ? getLicenseBadge(licenseInfo) : null;
+
   return (
     <div className="app-container">
       {/* 1. Top Header Bar */}
@@ -315,14 +349,14 @@ export const AppShell: React.FC = () => {
           />
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div className="pos-store-title">
-              <span>{storeName || "Apex Health Pharmacy"}</span>
-              <span className="pos-offline-pill">MediHisaab • Offline v1.0.0</span>
+              <span>{sanitizedStoreName}</span>
+              <span className="pos-offline-pill">MediHisaab • Offline-First POS</span>
             </div>
           </div>
         </div>
 
-        <div className="pos-header-actions">
-          {/* License Status Pill */}
+        <div className="pos-header-actions" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Dynamic License Badge */}
           {(licenseInfo || licenseStatusUnavailable) && (
             <button
               type="button"
@@ -334,116 +368,231 @@ export const AppShell: React.FC = () => {
                 gap: 6,
                 fontSize: "0.76rem",
                 fontWeight: 600,
-                padding: "3px 10px",
+                padding: "4px 10px",
                 borderRadius: "16px",
                 border: "1px solid",
                 background: !licenseInfo
                   ? "rgba(148, 163, 184, 0.12)"
                   : licenseInfo.status === "ACTIVE"
-                    ? "rgba(16, 185, 129, 0.15)"
-                    : licenseInfo.status === "TRIAL"
-                    ? "rgba(59, 130, 246, 0.15)"
-                    : licenseInfo.status === "GRACE_PERIOD"
-                    ? "rgba(245, 158, 11, 0.15)"
-                    : "rgba(239, 68, 68, 0.15)",
+                  ? "rgba(16, 185, 129, 0.15)"
+                  : licenseInfo.status === "TRIAL"
+                  ? "rgba(59, 130, 246, 0.15)"
+                  : licenseInfo.status === "GRACE_PERIOD"
+                  ? "rgba(245, 158, 11, 0.15)"
+                  : "rgba(239, 68, 68, 0.15)",
                 borderColor: !licenseInfo
                   ? "#64748b"
                   : licenseInfo.status === "ACTIVE"
-                    ? "#10b981"
-                    : licenseInfo.status === "TRIAL"
-                    ? "#3b82f6"
-                    : licenseInfo.status === "GRACE_PERIOD"
-                    ? "#f59e0b"
-                    : "#ef4444",
+                  ? "#10b981"
+                  : licenseInfo.status === "TRIAL"
+                  ? "#3b82f6"
+                  : licenseInfo.status === "GRACE_PERIOD"
+                  ? "#f59e0b"
+                  : "#ef4444",
                 color: !licenseInfo
                   ? "#cbd5e1"
                   : licenseInfo.status === "ACTIVE"
-                    ? "#34d399"
-                    : licenseInfo.status === "TRIAL"
-                    ? "#60a5fa"
-                    : licenseInfo.status === "GRACE_PERIOD"
-                    ? "#fbbf24"
-                    : "#f87171",
+                  ? "#34d399"
+                  : licenseInfo.status === "TRIAL"
+                  ? "#60a5fa"
+                  : licenseInfo.status === "GRACE_PERIOD"
+                  ? "#fbbf24"
+                  : "#f87171",
                 cursor: "pointer",
               }}
-              title={licenseInfo
-                ? `${getLicenseTermSummary(licenseInfo).label}\n${getLicenseTermSummary(licenseInfo).details}\nClick to view license status, contact admin, or submit renewal`
-                : "License details could not be loaded. Click to contact support or import a license file."}
+              title={
+                licenseBadgeInfo
+                  ? `${licenseBadgeInfo.tooltip}\nClick to view license status, contact admin, or submit renewal`
+                  : "License details could not be loaded. Click to contact support or import a license file."
+              }
             >
               <span style={{ width: 6, height: 6, flex: "0 0 6px", borderRadius: "50%", backgroundColor: "currentColor" }} />
-              <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.25 }}>
-                <span>{licenseInfo ? getLicenseTermSummary(licenseInfo).label : "License details unavailable"}</span>
-                {licenseInfo && <span style={{ fontSize: "0.65rem", opacity: 0.8 }}>{getLicenseTermSummary(licenseInfo).details}</span>}
-              </span>
+              <span>{licenseBadgeInfo ? licenseBadgeInfo.badge : "License"}</span>
             </button>
           )}
 
           {/* System Online / Health Indicator */}
           <HealthIndicator />
 
-          {/* Current Operator Profile */}
+          {/* User Profile Menu Dropdown */}
           {user && (
-            <div className="operator-badge-container">
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-                <span className="operator-name">{user.full_name}</span>
-                <span style={{ fontSize: "0.72rem", color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
-                  @{user.username}
+            <div style={{ position: "relative" }} ref={profileDropdownRef}>
+              <button
+                type="button"
+                className="operator-badge-container"
+                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                style={{
+                  cursor: "pointer",
+                  border: "1px solid var(--border-color)",
+                  background: "var(--bg-secondary)",
+                  padding: "4px 10px",
+                  borderRadius: "var(--radius-md)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+                title="Open Operator & System Menu"
+              >
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.2 }}>
+                  <span className="operator-name">{user.full_name}</span>
+                  <span style={{ fontSize: "0.7rem", color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
+                    @{user.username}
+                  </span>
+                </div>
+                <span className={`role-pill ${roleClass}`} style={{ fontSize: "0.72rem", padding: "2px 6px" }}>
+                  {user.role}
                 </span>
-              </div>
-              <span className={`role-pill ${roleClass}`}>{user.role}</span>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  style={{
+                    opacity: 0.7,
+                    transform: isProfileMenuOpen ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform 0.15s ease",
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+
+              {isProfileMenuOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 6px)",
+                    right: 0,
+                    width: 275,
+                    background: "var(--bg-panel)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "var(--radius-md)",
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                    zIndex: 1050,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border-color)", background: "var(--bg-secondary)" }}>
+                    <div style={{ fontWeight: 600, color: "var(--text-main)", fontSize: "0.92rem" }}>
+                      {user.full_name}
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                      @{user.username} · {user.role}
+                    </div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--accent-primary)", marginTop: 2 }}>
+                      {sanitizedStoreName}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: 6, display: "flex", flexDirection: "column", gap: 2 }}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ justifyContent: "flex-start", width: "100%", padding: "7px 10px", fontSize: "0.82rem" }}
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        setShowPinSwitchModal(true);
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M19 8v6M22 11h-6" />
+                      </svg>
+                      <span>Switch User (F11)</span>
+                    </button>
+
+                    {user.role === "ADMIN" && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ justifyContent: "flex-start", width: "100%", padding: "7px 10px", fontSize: "0.82rem" }}
+                        onClick={() => {
+                          setIsProfileMenuOpen(false);
+                          setShowSettingsModal(true);
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
+                          <circle cx="12" cy="12" r="3" />
+                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                        </svg>
+                        <span>Settings & Backups</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ justifyContent: "flex-start", width: "100%", padding: "7px 10px", fontSize: "0.82rem" }}
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        setShowShortcutsModal(true);
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
+                        <rect x="2" y="4" width="20" height="16" rx="2" />
+                        <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10" />
+                      </svg>
+                      <span>Shortcuts Guide (F12)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ justifyContent: "flex-start", width: "100%", padding: "7px 10px", fontSize: "0.82rem" }}
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        setShowContactAdminModal(true);
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      <span>License Details & Renew</span>
+                    </button>
+
+                    <div style={{ height: 1, background: "var(--border-color)", margin: "4px 0" }} />
+
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{
+                        justifyContent: "flex-start",
+                        width: "100%",
+                        padding: "8px 10px",
+                        fontSize: "0.82rem",
+                        color: "var(--accent-danger, #ef4444)",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                      }}
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        if (window.confirm("Are you sure you want to log out of this operator session?")) {
+                          performLogout();
+                        }
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", width: "100%" }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
+                          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                          <polyline points="16 17 21 12 16 7" />
+                          <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                        <span style={{ fontWeight: 600 }}>Logout (F10)</span>
+                      </div>
+                      <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 2, paddingLeft: 22 }}>
+                        Ends session. Background daemon keeps running.
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
-
-          {/* Admin Settings Button [ADMIN ONLY] */}
-          {user?.role === "ADMIN" && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowSettingsModal(true)}
-              title="Admin Settings"
-              aria-label="Open Admin Settings"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-              <span>Settings</span>
-            </button>
-          )}
-
-          {/* Switch Operator */}
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => setShowPinSwitchModal(true)}
-            title="Switch Operator (F11)"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M19 8v6M22 11h-6" />
-            </svg>
-            <span>Switch</span>
-          </button>
-
-          {/* Exit Terminal */}
-          <button
-            type="button"
-            className="btn btn-danger btn-sm"
-            onClick={() => {
-              if (window.confirm("Are you sure you want to log out?")) {
-                performLogout();
-              }
-            }}
-            title="Exit Terminal (F10)"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            <span>Exit</span>
-          </button>
         </div>
       </header>
  

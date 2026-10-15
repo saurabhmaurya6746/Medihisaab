@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import {
   useSettings,
@@ -8,7 +8,18 @@ import {
   POSPreferences,
   DEFAULT_SETTINGS,
 } from "../context/SettingsContext";
-import { getLicenseStatus, importLicense, LicenseStatusInfo } from "../api/system";
+import {
+  getLicenseStatus,
+  importLicense,
+  listBackups,
+  createBackup,
+  downloadBackupArchive,
+  previewRestore,
+  executeRestore,
+  LicenseStatusInfo,
+} from "../api/system";
+import type { BackupManifest, RestorePreviewResponse, RestoreExecuteResult } from "@pharmacy/api-contracts";
+import { formatRupees } from "@pharmacy/api-contracts";
 import { ConfirmModal } from "./ConfirmModal";
 import { ContactAdminModal } from "./ContactAdminModal";
 
@@ -17,7 +28,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type SettingsSection = "appearance" | "modules" | "preferences" | "license";
+type SettingsSection = "appearance" | "modules" | "preferences" | "license" | "backup";
 
 interface ModuleMeta {
   key: keyof ModuleSettings;
@@ -150,6 +161,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [licenseImportSuccess, setLicenseImportSuccess] = useState<string | null>(null);
   const [showContactAdminModal, setShowContactAdminModal] = useState<boolean>(false);
 
+  // Backup & Disaster Recovery state
+  const [backupsList, setBackupsList] = useState<BackupManifest[]>([]);
+  const [isBackupsLoading, setIsBackupsLoading] = useState<boolean>(false);
+  const [backupNote, setBackupNote] = useState<string>("");
+  const [isCreatingBackup, setIsCreatingBackup] = useState<boolean>(false);
+  const [backupSuccessMsg, setBackupSuccessMsg] = useState<string | null>(null);
+  const [backupErrorMsg, setBackupErrorMsg] = useState<string | null>(null);
+
+  // Restore state
+  const [selectedRestoreFile, setSelectedRestoreFile] = useState<File | null>(null);
+  const [isRestorePreviewLoading, setIsRestorePreviewLoading] = useState<boolean>(false);
+  const [restorePreview, setRestorePreview] = useState<RestorePreviewResponse | null>(null);
+  const [restorePreviewError, setRestorePreviewError] = useState<string | null>(null);
+  const [isRestoreExecuting, setIsRestoreExecuting] = useState<boolean>(false);
+  const [restoreResult, setRestoreResult] = useState<RestoreExecuteResult | null>(null);
+  const [restoreConfirmed, setRestoreConfirmed] = useState<boolean>(false);
+
+  const restoreFileInputRef = useRef<HTMLInputElement>(null);
+
   // Confirmation dialogs
   const [moduleToDisable, setModuleToDisable] = useState<ModuleMeta | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
@@ -165,6 +195,90 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       setLicenseImportError(msg);
     } finally {
       setIsLicenseLoading(false);
+    }
+  };
+
+  const fetchBackups = async () => {
+    setIsBackupsLoading(true);
+    try {
+      const data = await listBackups();
+      setBackupsList(data);
+    } catch (err: unknown) {
+      console.error("Failed to list backups:", err);
+    } finally {
+      setIsBackupsLoading(false);
+    }
+  };
+
+  const handleCreateBackup = async () => {
+    setIsCreatingBackup(true);
+    setBackupSuccessMsg(null);
+    setBackupErrorMsg(null);
+    try {
+      const result = await createBackup({ notes: backupNote || undefined, backup_type: "MANUAL" });
+      setBackupSuccessMsg(`Backup created: ${result.filename} (${(result.file_size_bytes / 1024).toFixed(1)} KB)`);
+      setBackupNote("");
+      fetchBackups();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to create backup snapshot";
+      setBackupErrorMsg(msg);
+    } finally {
+      setIsCreatingBackup(false);
+    }
+  };
+
+  const handleSelectRestoreFile = async (file: File) => {
+    setSelectedRestoreFile(file);
+    setRestorePreview(null);
+    setRestorePreviewError(null);
+    setRestoreResult(null);
+    setRestoreConfirmed(false);
+    setIsRestorePreviewLoading(true);
+
+    try {
+      const preview = await previewRestore({ file });
+      setRestorePreview(preview);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to parse backup package";
+      setRestorePreviewError(msg);
+    } finally {
+      setIsRestorePreviewLoading(false);
+    }
+  };
+
+  const handleSelectExistingBackupForRestore = async (backupId: number) => {
+    setSelectedRestoreFile(null);
+    setRestorePreview(null);
+    setRestorePreviewError(null);
+    setRestoreResult(null);
+    setRestoreConfirmed(false);
+    setIsRestorePreviewLoading(true);
+
+    try {
+      const preview = await previewRestore({ backupId });
+      setRestorePreview(preview);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to inspect selected backup";
+      setRestorePreviewError(msg);
+    } finally {
+      setIsRestorePreviewLoading(false);
+    }
+  };
+
+  const handleExecuteRestore = async () => {
+    if (!restorePreview || !restoreConfirmed) return;
+    setIsRestoreExecuting(true);
+    setRestorePreviewError(null);
+
+    try {
+      const result = await executeRestore(restorePreview.staging_token, true);
+      setRestoreResult(result);
+      fetchBackups();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Disaster recovery restore failed";
+      setRestorePreviewError(msg);
+    } finally {
+      setIsRestoreExecuting(false);
     }
   };
 
@@ -205,6 +319,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       setValidationError(null);
       setLicenseImportError(null);
       setLicenseImportSuccess(null);
+      setBackupSuccessMsg(null);
+      setBackupErrorMsg(null);
+      setRestorePreview(null);
+      setRestoreResult(null);
       setActiveSection("appearance");
     }
   }, [isOpen, settings]);
@@ -213,6 +331,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   useEffect(() => {
     if (isOpen && activeSection === "license") {
       fetchLicense();
+    }
+  }, [isOpen, activeSection]);
+
+  // Load backups when backup tab is opened
+  useEffect(() => {
+    if (isOpen && activeSection === "backup") {
+      fetchBackups();
     }
   }, [isOpen, activeSection]);
 
@@ -423,6 +548,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
                 <span>License</span>
+              </button>
+
+              <button
+                type="button"
+                className={`settings-nav-item ${activeSection === "backup" ? "active" : ""}`}
+                onClick={() => {
+                  setActiveSection("backup");
+                  setValidationError(null);
+                  setBackupSuccessMsg(null);
+                  setBackupErrorMsg(null);
+                  setRestorePreview(null);
+                  setRestoreResult(null);
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span>Backup & Restore</span>
               </button>
             </aside>
 
@@ -928,6 +1073,373 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                         Contact Vendor & Renew
                       </button>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 5. Backup & Restore Section */}
+              {activeSection === "backup" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div className="settings-section-header">
+                    <h3 className="settings-section-title">Database Backup & Disaster Recovery</h3>
+                    <p className="settings-section-desc">
+                      Safely create hot non-blocking SQLite snapshots (.pbk archives) or restore from a backup.
+                      Restores verify archive SHA-256 hashes, schemas, and create an automated safety snapshot before replacing live data.
+                    </p>
+                  </div>
+
+                  {backupSuccessMsg && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "10px 14px",
+                        background: "rgba(22, 163, 74, 0.12)",
+                        border: "1px solid rgba(22, 163, 74, 0.3)",
+                        borderRadius: "var(--radius-sm)",
+                        color: "#16a34a",
+                        fontSize: "0.88rem",
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      <span>{backupSuccessMsg}</span>
+                    </div>
+                  )}
+
+                  {backupErrorMsg && (
+                    <div className="auth-error-banner" style={{ margin: 0 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <span>{backupErrorMsg}</span>
+                    </div>
+                  )}
+
+                  {restorePreviewError && (
+                    <div className="auth-error-banner" style={{ margin: 0 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <span>{restorePreviewError}</span>
+                    </div>
+                  )}
+
+                  {restoreResult && (
+                    <div
+                      style={{
+                        padding: "16px 18px",
+                        background: "rgba(16, 185, 129, 0.12)",
+                        border: "1px solid rgba(16, 185, 129, 0.35)",
+                        borderRadius: "var(--radius-md)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                      }}
+                    >
+                      <strong style={{ color: "#10b981", fontSize: "1rem" }}>
+                        Disaster Recovery Successful!
+                      </strong>
+                      <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-main)" }}>
+                        {restoreResult.message}
+                      </p>
+                      <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                        A safety snapshot was saved as: <code style={{ fontFamily: "var(--font-mono)", color: "var(--accent-primary)" }}>{restoreResult.safety_backup_filename}</code>
+                      </div>
+                      <div style={{ fontSize: "0.78rem", color: "#f59e0b", marginTop: 4 }}>
+                        Please refresh your browser window to reload all data views from the restored database.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 1. Create Backup Card */}
+                  <div
+                    style={{
+                      background: "var(--bg-secondary)",
+                      border: "1px solid var(--border-color)",
+                      borderRadius: "var(--radius-md)",
+                      padding: "16px 20px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 12,
+                    }}
+                  >
+                    <h4 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text-main)", margin: 0 }}>
+                      Create Instant Hot Backup
+                    </h4>
+                    <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", margin: 0 }}>
+                      Creates a clean snapshot of the live SQLite database without stopping counter billing or locking transactions.
+                    </p>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="Optional backup note (e.g., Pre-audit snapshot)"
+                        value={backupNote}
+                        onChange={(e) => setBackupNote(e.target.value)}
+                        style={{ maxWidth: 360, fontSize: "0.85rem" }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={handleCreateBackup}
+                        disabled={isCreatingBackup}
+                      >
+                        {isCreatingBackup ? "Taking Snapshot..." : "Create Backup Now"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2. Restore Backup Card */}
+                  <div
+                    style={{
+                      border: "1px dashed var(--border-color)",
+                      borderRadius: "var(--radius-md)",
+                      padding: "16px 20px",
+                      background: "var(--bg-secondary)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 14,
+                    }}
+                  >
+                    <div>
+                      <h4 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text-main)", margin: 0 }}>
+                        Restore Database from Backup Archive (.pbk / .zip)
+                      </h4>
+                      <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: 4 }}>
+                        Upload a previously generated backup archive. Structure, schema, and record counts are verified prior to restoration.
+                      </p>
+                    </div>
+
+                    {!restorePreview ? (
+                      <div>
+                        <input
+                          ref={restoreFileInputRef}
+                          type="file"
+                          accept=".pbk,.zip,application/zip"
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleSelectRestoreFile(e.target.files[0]);
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => restoreFileInputRef.current?.click()}
+                          disabled={isRestorePreviewLoading}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                          </svg>
+                          <span>{isRestorePreviewLoading ? "Inspecting Package..." : "Select Backup File (.pbk / .zip)"}</span>
+                        </button>
+                      </div>
+                    ) : (
+                      /* Restore Preview and Confirmation */
+                      <div
+                        style={{
+                          background: "var(--bg-panel)",
+                          border: "1px solid var(--border-color)",
+                          borderRadius: "var(--radius-sm)",
+                          padding: 16,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 12,
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <strong style={{ color: "var(--text-main)", fontSize: "0.92rem" }}>
+                              {restorePreview.filename}
+                              {selectedRestoreFile && (
+                                <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: "normal", marginLeft: 8 }}>
+                                  ({(selectedRestoreFile.size / 1024).toFixed(1)} KB)
+                                </span>
+                              )}
+                            </strong>
+                            <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                              Created: {new Date(restorePreview.created_at).toLocaleString("en-IN")}
+                            </div>
+                          </div>
+                          <span
+                            style={{
+                              fontSize: "0.72rem",
+                              fontWeight: 700,
+                              padding: "3px 8px",
+                              borderRadius: 4,
+                              background: restorePreview.is_compatible ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                              color: restorePreview.is_compatible ? "#10b981" : "#ef4444",
+                              border: `1px solid ${restorePreview.is_compatible ? "#10b981" : "#ef4444"}`,
+                            }}
+                          >
+                            {restorePreview.integrity_status} • {restorePreview.is_compatible ? "COMPATIBLE" : "INCOMPATIBLE"}
+                          </span>
+                        </div>
+
+                        {/* Stats inside backup */}
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+                          <div style={{ background: "var(--bg-secondary)", padding: "8px 12px", borderRadius: 4 }}>
+                            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Schema Version</div>
+                            <div style={{ fontSize: "1rem", fontWeight: 600 }}>v{restorePreview.schema_version}</div>
+                          </div>
+                          <div style={{ background: "var(--bg-secondary)", padding: "8px 12px", borderRadius: 4 }}>
+                            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Medicines Count</div>
+                            <div style={{ fontSize: "1rem", fontWeight: 600 }}>{restorePreview.medicine_count}</div>
+                          </div>
+                          <div style={{ background: "var(--bg-secondary)", padding: "8px 12px", borderRadius: 4 }}>
+                            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Invoices Count</div>
+                            <div style={{ fontSize: "1rem", fontWeight: 600 }}>{restorePreview.invoice_count}</div>
+                          </div>
+                          <div style={{ background: "var(--bg-secondary)", padding: "8px 12px", borderRadius: 4 }}>
+                            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Recorded Revenue</div>
+                            <div style={{ fontSize: "1rem", fontWeight: 600 }}>{formatRupees(restorePreview.revenue_total_paise)}</div>
+                          </div>
+                        </div>
+
+                        {/* Safety notice */}
+                        <div
+                          style={{
+                            background: "rgba(245, 158, 11, 0.1)",
+                            border: "1px solid rgba(245, 158, 11, 0.3)",
+                            borderRadius: 4,
+                            padding: "10px 12px",
+                            fontSize: "0.8rem",
+                            color: "#f59e0b",
+                          }}
+                        >
+                          <strong>Safety Guarantee:</strong> An automatic hot safety backup will be created immediately before any database replacement.
+                        </div>
+
+                        {/* User confirmation checkbox */}
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.84rem", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={restoreConfirmed}
+                            onChange={(e) => setRestoreConfirmed(e.target.checked)}
+                          />
+                          <span style={{ color: "var(--text-main)", fontWeight: 500 }}>
+                            I confirm that I want to restore this backup and overwrite the current database.
+                          </span>
+                        </label>
+
+                        {/* Restore buttons */}
+                        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => {
+                              setRestorePreview(null);
+                              setSelectedRestoreFile(null);
+                              setRestoreConfirmed(false);
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            disabled={!restoreConfirmed || isRestoreExecuting}
+                            onClick={handleExecuteRestore}
+                          >
+                            {isRestoreExecuting ? "Restoring Database..." : "Execute Database Restore"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. Existing Backups History Table */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <h4 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text-main)", margin: 0 }}>
+                        Local Backup Archive History
+                      </h4>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={fetchBackups}
+                        title="Refresh backups list"
+                      >
+                        Refresh List
+                      </button>
+                    </div>
+
+                    {isBackupsLoading ? (
+                      <div style={{ padding: 16, textAlign: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                        Loading backup records...
+                      </div>
+                    ) : backupsList.length === 0 ? (
+                      <div style={{ padding: 16, textAlign: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                        No local backup archives found.
+                      </div>
+                    ) : (
+                      <div style={{ maxHeight: 240, overflowY: "auto", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)" }}>
+                        <table className="data-table" style={{ fontSize: "0.8rem", margin: 0 }}>
+                          <thead>
+                            <tr>
+                              <th>Backup File</th>
+                              <th>Type</th>
+                              <th>Date</th>
+                              <th>Size</th>
+                              <th>Status</th>
+                              <th style={{ textAlign: "right" }}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {backupsList.map((b) => (
+                              <tr key={b.id}>
+                                <td style={{ fontFamily: "var(--font-mono)" }}>{b.filename}</td>
+                                <td>
+                                  <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                    {b.backup_type}
+                                  </span>
+                                </td>
+                                <td>{new Date(b.created_at).toLocaleString("en-IN")}</td>
+                                <td>{((b.file_size_bytes || 0) / 1024).toFixed(1)} KB</td>
+                                <td>
+                                  <span style={{ color: b.status === "VALID" ? "#10b981" : "#ef4444", fontWeight: 600 }}>
+                                    {b.status}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  <div style={{ display: "inline-flex", gap: 6 }}>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-sm"
+                                      style={{ padding: "2px 6px", fontSize: "0.74rem" }}
+                                      onClick={() => downloadBackupArchive(b.id, b.filename)}
+                                      title="Download backup file"
+                                    >
+                                      Download
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary btn-sm"
+                                      style={{ padding: "2px 6px", fontSize: "0.74rem" }}
+                                      onClick={() => handleSelectExistingBackupForRestore(b.id)}
+                                      title="Inspect and restore this snapshot"
+                                    >
+                                      Restore
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

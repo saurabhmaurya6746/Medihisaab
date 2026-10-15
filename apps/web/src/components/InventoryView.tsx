@@ -13,11 +13,13 @@ import * as inventoryApi from "../api/inventory";
 import * as mastersApi from "../api/masters";
 import { PaginationBar } from "./PaginationBar";
 import { QuickWantBookModal } from "./pos/QuickWantBookModal";
+import { ImportOpeningStockModal } from "./ImportOpeningStockModal";
 
 type InventoryTab = "expiry" | "return_dump" | "want_book";
 
 export const InventoryView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<InventoryTab>("expiry");
+  const [showOpeningStockModal, setShowOpeningStockModal] = useState<boolean>(false);
 
   // =========================================================================
   // 1. EXPIRY DASHBOARD STATE
@@ -190,32 +192,49 @@ export const InventoryView: React.FC = () => {
             </p>
           </div>
 
-          {/* Sub-Tab Navigation Strip */}
-          <div style={{ display: "flex", gap: 6, backgroundColor: "var(--bg-app)", padding: 4, borderRadius: 6 }}>
+          {/* Header Action Strip */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button
               type="button"
-              className={`btn btn-sm ${activeTab === "expiry" ? "btn-primary" : "btn-secondary"}`}
-              onClick={() => setActiveTab("expiry")}
-              style={{ fontWeight: 600 }}
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowOpeningStockModal(true)}
+              title="Import Opening Stock and batch balances from CSV/Excel"
             >
-              Expiry
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span>Import Opening Stock</span>
             </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${activeTab === "return_dump" ? "btn-primary" : "btn-secondary"}`}
-              onClick={() => setActiveTab("return_dump")}
-              style={{ fontWeight: 600 }}
-            >
-              Supplier Returns
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${activeTab === "want_book" ? "btn-primary" : "btn-secondary"}`}
-              onClick={() => setActiveTab("want_book")}
-              style={{ fontWeight: 600 }}
-            >
-              Reorder List
-            </button>
+
+            {/* Sub-Tab Navigation Strip */}
+            <div style={{ display: "flex", gap: 6, backgroundColor: "var(--bg-app)", padding: 4, borderRadius: 6 }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${activeTab === "expiry" ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setActiveTab("expiry")}
+                style={{ fontWeight: 600 }}
+              >
+                Expiry
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${activeTab === "return_dump" ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setActiveTab("return_dump")}
+                style={{ fontWeight: 600 }}
+              >
+                Supplier Returns
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${activeTab === "want_book" ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setActiveTab("want_book")}
+                style={{ fontWeight: 600 }}
+              >
+                Reorder List
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -450,8 +469,24 @@ export const InventoryView: React.FC = () => {
                     </tr>
                   ) : !expiryData?.items || expiryData.items.length === 0 ? (
                     <tr>
-                      <td colSpan={10} style={{ textAlign: "center", padding: 24, color: "var(--text-dim)" }}>
-                        No batches match the selected expiry criteria.
+                      <td colSpan={10} style={{ textAlign: "center", padding: "36px 20px" }}>
+                        <div style={{ color: "var(--text-main)", fontWeight: 600, fontSize: "0.95rem" }}>
+                          No batches found matching selected criteria
+                        </div>
+                        <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: 4 }}>
+                          {expirySearch
+                            ? `No records found for query "${expirySearch}".`
+                            : "No active batches in inventory. You can import opening balances or inward purchase invoices."}
+                        </p>
+                        <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 12 }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setShowOpeningStockModal(true)}
+                          >
+                            Import Opening Stock (CSV/Excel)
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -1038,6 +1073,17 @@ export const InventoryView: React.FC = () => {
           if (activeTab === "want_book") {
             if (wantBookSubTab === "low_stock") loadLowStock();
             else loadWantBookList();
+          }
+        }}
+      />
+
+      {/* Bulk Opening Stock Import Modal */}
+      <ImportOpeningStockModal
+        isOpen={showOpeningStockModal}
+        onClose={() => setShowOpeningStockModal(false)}
+        onSuccess={() => {
+          if (activeTab === "expiry") {
+            loadExpiryDashboard();
           }
         }}
       />

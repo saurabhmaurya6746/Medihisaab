@@ -7,11 +7,6 @@ REM ============================================================================
 setlocal enabledelayedexpansion
 title MediHisaab - Launching...
 
-echo ==============================================================================
-echo  MEDIHISAAB - OFFLINE PHARMACY MANAGEMENT SYSTEM
-echo ==============================================================================
-echo [INFO] Initializing MediHisaab...
-
 set "SCRIPT_DIR=%~dp0"
 set "DAEMON_SRC=%SCRIPT_DIR%..\apps\daemon\src"
 set "APP_URL=http://127.0.0.1:38291"
@@ -22,20 +17,42 @@ if not exist "%PHARMACY_WEB_DIR%\index.html" (
   )
 )
 
-REM The installed daemon serves the UI from PHARMACY_WEB_DIR. Set this explicitly
-REM because the executable lives under daemon\ while the UI lives under web\.
+REM Setup logging paths
+if not defined LOCALAPPDATA (
+  set "LOG_DIR=%USERPROFILE%\AppData\Local\PharmacyApp\logs"
+) else (
+  set "LOG_DIR=%LOCALAPPDATA%\PharmacyApp\logs"
+)
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>nul
+set "LAUNCHER_ERR=%LOG_DIR%\launcher-error.txt"
+
+REM Clear previous error marker
+if exist "%LAUNCHER_ERR%" del "%LAUNCHER_ERR%" >nul 2>nul
+
+echo ==============================================================================
+echo  MEDIHISAAB - OFFLINE PHARMACY MANAGEMENT SYSTEM
+echo  Startup from: %SCRIPT_DIR%
+echo ==============================================================================
+echo [INFO] Initializing MediHisaab...
+
+REM Check web assets existence
 if not exist "%PHARMACY_WEB_DIR%\index.html" (
   echo [ERROR] MediHisaab UI files were not found at "%PHARMACY_WEB_DIR%".
   echo [ERROR] Repair or reinstall MediHisaab so the web folder is installed beside this launcher.
+  echo Missing web files: MediHisaab UI files were not found at "%PHARMACY_WEB_DIR%". Please repair or reinstall MediHisaab. > "%LAUNCHER_ERR%"
   exit /b 1
 )
 
 REM Check if daemon is already running on port 38291
 if exist "%SCRIPT_DIR%check-daemon.ps1" (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%check-daemon.ps1" -Port 38291 -BaseUrl "%APP_URL%"
-  if !ERRORLEVEL! equ 2 goto :verify_app_page
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%check-daemon.ps1" -Port 38291 -BaseUrl "%APP_URL%" -InstallDir "%SCRIPT_DIR%"
+  if !ERRORLEVEL! equ 2 (
+    echo [INFO] Existing active daemon verified.
+    goto :verify_app_page
+  )
   if !ERRORLEVEL! equ 1 (
-    echo [ERROR] Another application is using port 38291. Close it and retry.
+    echo [ERROR] Port conflict: Port 38291 is currently occupied by another application. Close it and retry.
+    echo Port conflict: Port 38291 is currently occupied by another application. Close that application and restart MediHisaab. > "%LAUNCHER_ERR%"
     exit /b 1
   )
 )
@@ -55,7 +72,8 @@ if exist "%SCRIPT_DIR%pharmacy-daemon.exe" set "DAEMON_EXE=%SCRIPT_DIR%pharmacy-
 
 if defined DAEMON_EXE (
   echo [INFO] Starting standalone MediHisaab Daemon: !DAEMON_EXE!
-  start "MediHisaab Daemon" /min "!DAEMON_EXE!"
+  REM Keep the daemon in the launcher's hidden console; do not create a minimized console window.
+  start "MediHisaab Daemon" /b "!DAEMON_EXE!"
   goto :wait_for_daemon
 )
 
@@ -64,16 +82,16 @@ where python >nul 2>nul
 if %ERRORLEVEL% neq 0 (
   echo [ERROR] Neither standalone MediHisaab Daemon executable nor Python runtime was found.
   echo [ERROR] Please install MediHisaab using the official installer.
+  echo Daemon startup failed: Neither standalone MediHisaab Daemon executable nor Python runtime was found. Please reinstall MediHisaab. > "%LAUNCHER_ERR%"
   exit /b 1
 )
 
 REM Start daemon via Python interpreter
 echo [INFO] Starting MediHisaab Daemon via Python on port 38291...
 set "PYTHONPATH=%DAEMON_SRC%;%PYTHONPATH%"
-start "MediHisaab Daemon" /min python -m pharmacy_daemon
+start "MediHisaab Daemon" /b python -m pharmacy_daemon
 
 :wait_for_daemon
-
 REM Wait for port 38291 to become active (up to 15 seconds)
 echo [INFO] Waiting for service initialization...
 set /a ATTEMPTS=0
@@ -89,25 +107,30 @@ if !ATTEMPTS! lss 15 (
   goto :wait_loop
 )
 
-echo [WARNING] Daemon did not report listening within 15 seconds.
+echo [ERROR] Daemon startup failed: Backend daemon did not start listening on port 38291 within 15 seconds.
+echo Daemon startup failed: Backend daemon did not start listening on port 38291 within 15 seconds. Check daemon.log for startup error details. > "%LAUNCHER_ERR%"
+exit /b 1
 
 :verify_app_page
+echo [INFO] Verifying MediHisaab UI responsiveness...
 set /a VERIFY_ATTEMPTS=0
 :verify_page_loop
-powershell -NoProfile -Command "try { $r=Invoke-WebRequest -Uri '%APP_URL%/' -UseBasicParsing -TimeoutSec 3; if($r.StatusCode -ne 200 -or $r.Headers['Content-Type'] -notmatch 'text/html') { exit 1 } } catch { exit 1 }"
+powershell -NoProfile -Command "try { $r=Invoke-WebRequest -Uri '%APP_URL%/' -UseBasicParsing -TimeoutSec 4; if($r.StatusCode -ne 200 -or $r.Headers['Content-Type'] -notmatch 'text/html') { exit 1 } } catch { exit 1 }"
 if %ERRORLEVEL% equ 0 goto :open_desktop_window
 set /a VERIFY_ATTEMPTS+=1
-if !VERIFY_ATTEMPTS! lss 5 (
+if !VERIFY_ATTEMPTS! lss 10 (
   ping 127.0.0.1 -n 2 >nul
   goto :verify_page_loop
 )
-echo [ERROR] MediHisaab UI did not load from %APP_URL%. Restart the app and try again.
+
+echo [ERROR] Page health check failed: MediHisaab UI did not respond at %APP_URL%.
+echo Page health check failed: MediHisaab UI did not respond at %APP_URL% after 10 verification attempts. Restart the application and try again. > "%LAUNCHER_ERR%"
 exit /b 1
 
 :open_desktop_window
 echo [INFO] Opening MediHisaab in dedicated desktop window...
 
-REM Prefer the packaged standalone desktop-window host (no system Python required).
+REM Prefer the packaged standalone desktop-window host
 set "WINDOW_EXE="
 if exist "%SCRIPT_DIR%desktop-window\desktop-window.exe" set "WINDOW_EXE=%SCRIPT_DIR%desktop-window\desktop-window.exe"
 if exist "%SCRIPT_DIR%desktop-window.exe" set "WINDOW_EXE=%SCRIPT_DIR%desktop-window.exe"
@@ -150,8 +173,8 @@ if defined CHROME_EXE (
   goto :done
 )
 
-echo [ERROR] No desktop window host is installed and no supported app-mode browser was found.
-echo [ERROR] Repair MediHisaab or install Microsoft Edge WebView2, then try again.
+echo [ERROR] Missing desktop-window host: No desktop window host (desktop-window.exe) is installed and no supported app-mode browser was found.
+echo Missing desktop-window host: No desktop window host (desktop-window.exe) is installed and no supported app-mode browser was found. Please repair MediHisaab or install Microsoft Edge WebView2. > "%LAUNCHER_ERR%"
 exit /b 1
 
 :done

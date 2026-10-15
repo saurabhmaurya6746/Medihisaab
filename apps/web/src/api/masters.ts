@@ -17,8 +17,12 @@ import type {
   UpdateCustomerInput,
   PaginatedResult,
   ApiSuccessEnvelope,
+  MedicineImportPreviewResponse,
+  MedicineImportExecuteInput,
+  MedicineImportExecuteResponse,
 } from "@pharmacy/api-contracts";
-import { apiClient } from "./client";
+export type { DuplicatePolicy } from "@pharmacy/api-contracts";
+import { apiClient, getStoredToken, ApiError } from "./client";
 
 // ==========================================
 // 1. MEDICINES API
@@ -236,3 +240,51 @@ export async function deactivateCustomer(id: number): Promise<Customer> {
   });
   return resp.data;
 }
+
+// ==========================================
+// 5. BULK MEDICINE IMPORT
+// ==========================================
+
+export async function downloadMedicineImportTemplate(format: "csv" | "xlsx" = "xlsx"): Promise<void> {
+  const token = getStoredToken();
+  const res = await fetch(`/api/v1/masters/medicines/import/template?format=${format}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, "Failed to download medicine import template");
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `medihisaab_medicines_template.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function previewMedicineImport(file: File): Promise<MedicineImportPreviewResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const resp = await apiClient<ApiSuccessEnvelope<MedicineImportPreviewResponse>>(
+    "/api/v1/masters/medicines/import-preview",
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+  return resp.data;
+}
+
+export async function executeMedicineImport(payload: MedicineImportExecuteInput): Promise<MedicineImportExecuteResponse> {
+  const resp = await apiClient<ApiSuccessEnvelope<MedicineImportExecuteResponse>>(
+    "/api/v1/masters/medicines/import-execute",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+  return resp.data;
+}
+

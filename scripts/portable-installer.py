@@ -13,8 +13,8 @@ from tkinter import filedialog, messagebox, ttk
 from zipfile import ZipFile
 
 
-APP_VERSION = "1.0.3"
-PACKAGE_NAME = "MediHisaab-v1.0.3-Portable.zip"
+APP_VERSION = "1.0.5"
+PACKAGE_NAME = "MediHisaab-v1.0.5-Portable.zip"
 
 
 def resource_path(name: str) -> Path:

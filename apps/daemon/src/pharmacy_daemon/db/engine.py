@@ -61,6 +61,10 @@ class DatabaseEngine:
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);")
+        user_cols = get_columns("users")
+        if "email" not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN email TEXT;")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
 
         # 2. system_settings table
         cursor.execute("""
@@ -140,6 +144,25 @@ class DatabaseEngine:
                 INSERT OR IGNORE INTO system_config (key, value, description, is_secret, updated_at)
                 VALUES ('store_name', ?, 'Store trading business name on invoices', 0, ?);
             """, (set_store[0], now_str))
+
+        # Sanitize any legacy placeholder 'MediHisaab One-Day Trial' in store_name
+        for tbl in ("system_settings", "system_config"):
+            cursor.execute(f"SELECT value FROM {tbl} WHERE key = 'store_name';")
+            cur_st = cursor.fetchone()
+            if cur_st and cur_st[0] and cur_st[0].strip().lower() in ("medihisaab one-day trial", "one-day trial", "medihisaab trial"):
+                # Try reading real client name from license.json if present
+                clean_store_name = "MediHisaab Pharmacy"
+                cand_lic = self.db_path.parent.parent / "license.json"
+                if cand_lic.exists():
+                    try:
+                        import json as _json
+                        with open(cand_lic, "r", encoding="utf-8") as _lf:
+                            _lic_data = _json.load(_lf)
+                            if _lic_data.get("client_name"):
+                                clean_store_name = _lic_data["client_name"]
+                    except Exception:
+                        pass
+                cursor.execute(f"UPDATE {tbl} SET value = ?, updated_at = ? WHERE key = 'store_name';", (clean_store_name, now_str))
 
         # 6. Seed system_config defaults (store_name is configured during first-run setup or migrated from app_settings)
         default_configs = [

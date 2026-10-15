@@ -6,6 +6,7 @@ import type {
   SystemSetupStatusResponse,
   FirstRunSetupInput,
   LoginInput,
+  OwnerLoginInput,
   PinUnlockInput,
   AuthTokenResponse,
   User,
@@ -25,6 +26,13 @@ export async function firstRunSetup(payload: FirstRunSetupInput): Promise<AuthTo
 
 export async function login(payload: LoginInput): Promise<AuthTokenResponse> {
   return apiClient<AuthTokenResponse>("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function ownerLogin(payload: OwnerLoginInput): Promise<AuthTokenResponse> {
+  return apiClient<AuthTokenResponse>("/api/v1/auth/owner-login", {
     method: "POST",
     body: JSON.stringify(payload),
   });

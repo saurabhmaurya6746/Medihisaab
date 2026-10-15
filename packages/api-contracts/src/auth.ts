@@ -38,6 +38,7 @@ export interface User {
   id: number;
   username: string;
   full_name: string;
+  email?: string | null;
   role: UserRole;
   is_active: boolean;
   has_pin: boolean;
@@ -51,6 +52,7 @@ export interface User {
 export interface CreateUserInput {
   username: string;
   full_name: string;
+  email?: string | null;
   password: string;
   pin?: string | null;
   role: UserRole;
@@ -61,15 +63,24 @@ export interface CreateUserInput {
  */
 export interface UpdateUserInput {
   full_name?: string;
+  email?: string | null;
   role?: UserRole;
   is_active?: boolean;
 }
 
 /**
- * Password login request.
+ * Password login request for local operators.
  */
 export interface LoginInput {
   username: string;
+  password: string;
+}
+
+/**
+ * Portal account login request for pharmacy owner.
+ */
+export interface OwnerLoginInput {
+  email: string;
   password: string;
 }
 
@@ -89,6 +100,10 @@ export interface AuthTokenResponse {
   token_type: "bearer";
   expires_in_seconds: number;
   user: User;
+  auth_source?: "ONLINE_PORTAL" | "OFFLINE_CACHED" | "LOCAL_PASSWORD" | "PIN";
+  portal_token?: string | null;
+  subscription_status?: string | null;
+  message?: string | null;
 }
 
 /**

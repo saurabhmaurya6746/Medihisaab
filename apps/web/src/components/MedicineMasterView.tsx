@@ -12,6 +12,7 @@ import { useAuth } from "../context/AuthContext";
 import * as mastersApi from "../api/masters";
 import { PaginationBar } from "./PaginationBar";
 import { ConfirmModal } from "./ConfirmModal";
+import { ImportMedicinesModal } from "./ImportMedicinesModal";
 
 export const MedicineMasterView: React.FC = () => {
   const { user } = useAuth();
@@ -37,6 +38,7 @@ export const MedicineMasterView: React.FC = () => {
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
+  const [showImportModal, setShowImportModal] = useState<boolean>(false);
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null);
   const [deactivatingMedicine, setDeactivatingMedicine] = useState<Medicine | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -232,21 +234,37 @@ export const MedicineMasterView: React.FC = () => {
           </button>
 
           {canEdit ? (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => {
-                setModalError(null);
-                setShowAddModal(true);
-              }}
-              title="Add New Medicine [Alt+N]"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              <span>+ Add Medicine</span>
-            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowImportModal(true)}
+                title="Import Medicines from CSV or Excel file"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>Import Medicines</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setModalError(null);
+                  setShowAddModal(true);
+                }}
+                title="Add New Medicine [Alt+N]"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span>+ Add Medicine</span>
+              </button>
+            </div>
           ) : (
             <span
               style={{
@@ -306,17 +324,38 @@ export const MedicineMasterView: React.FC = () => {
               ) : medicines.length === 0 ? (
                 <tr>
                   <td colSpan={canEdit ? 9 : 8}>
-                    <div className="table-empty-state">
+                    <div className="table-empty-state" style={{ padding: "40px 20px" }}>
                       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                         <circle cx="12" cy="12" r="10" />
                         <line x1="8" y1="12" x2="16" y2="12" />
                       </svg>
                       <strong style={{ color: "#ffffff", fontSize: "0.95rem" }}>No medicines matched your criteria</strong>
-                      <p style={{ fontSize: "0.82rem", marginTop: 4 }}>
+                      <p style={{ fontSize: "0.82rem", marginTop: 4, color: "var(--text-muted)" }}>
                         {debouncedQuery
                           ? `No records found for query "${debouncedQuery}". Check spelling or clear filters.`
-                          : "Master medicine catalog is empty. Add your first medicine to get started."}
+                          : "Master medicine catalog is empty. Add a medicine or import your bulk catalog to get started."}
                       </p>
+                      {canEdit && (
+                        <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "center" }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => {
+                              setModalError(null);
+                              setShowAddModal(true);
+                            }}
+                          >
+                            + Add First Medicine
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setShowImportModal(true)}
+                          >
+                            Import Medicines (CSV/Excel)
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -527,6 +566,16 @@ export const MedicineMasterView: React.FC = () => {
         isLoading={isSubmitting}
         onConfirm={handleConfirmDeactivate}
         onCancel={() => setDeactivatingMedicine(null)}
+      />
+
+      {/* 7. Bulk Medicine Import Modal */}
+      <ImportMedicinesModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => {
+          loadMedicines();
+          loadManufacturers();
+        }}
       />
     </div>
   );

@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 import math
 import re
 import sqlite3
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 
 from .dependencies import get_db, require_role, require_write_role
 from .schemas import (
@@ -16,6 +16,10 @@ from .schemas import (
     CreateSupplierRequest,
     CustomerResponse,
     ManufacturerResponse,
+    MedicineImportExecuteRequest,
+    MedicineImportExecuteResponse,
+    MedicineImportPreviewResponse,
+    MedicineImportRowSchema,
     MedicineResponse,
     PaginatedData,
     SuccessResponse,
@@ -25,6 +29,15 @@ from .schemas import (
     UpdateManufacturerRequest,
     UpdateMedicineRequest,
     UpdateSupplierRequest,
+)
+from .tabular_import import (
+    clear_staged_import,
+    find_col,
+    generate_csv_template,
+    generate_xlsx_template,
+    get_staged_import,
+    parse_tabular_upload,
+    save_staged_import,
 )
 from ..security.roles import UserRole
 
@@ -561,6 +574,406 @@ def deactivate_medicine(id: int, db: sqlite3.Connection = Depends(get_db)):
     cursor.close()
 
     return get_medicine(id, db)
+
+
+# ==============================================================================
+# 2B. MEDICINES BULK IMPORT (CSV & EXCEL)
+# ==============================================================================
+
+MEDICINE_TEMPLATE_HEADERS = [
+    "Medicine Name *",
+    "Generic Composition",
+    "Dosage Form",
+    "Strength",
+    "Pack Size *",
+    "Manufacturer",
+    "HSN Code",
+    "GST Rate %",
+    "Schedule H1 (YES/NO)",
+    "Schedule H (YES/NO)",
+    "Narcotic (YES/NO)",
+    "Min Stock Units",
+    "Rack Location",
+    "Barcode",
+]
+
+MEDICINE_SAMPLE_ROWS = [
+    ["Augmentin 625", "Amoxicillin + Clavulanic Acid", "TABLET", "625mg", 10, "GlaxoSmithKline", "3004", 12, "NO", "YES", "NO", 15, "A-01", "8901234567890"],
+    ["Dolo 650", "Paracetamol", "TABLET", "650mg", 15, "Micro Labs", "3004", 12, "NO", "NO", "NO", 20, "A-02", "8901234567891"],
+    ["Azithral 500", "Azithromycin", "TABLET", "500mg", 5, "Alembic Pharma", "3004", 12, "YES", "YES", "NO", 10, "B-01", "8901234567892"],
+    ["Benadryl Cough Syrup", "Diphenhydramine", "SYRUP", "100ml", 1, "Johnson & Johnson", "3004", 12, "NO", "NO", "NO", 10, "C-01", ""],
+]
+
+
+@router.get("/medicines/import/template", dependencies=[read_guard])
+def download_medicine_template(format: str = Query("csv", description="csv or xlsx")):
+    """Download clean, ready-to-use CSV or Excel sample template for medicines import."""
+    fmt = format.strip().lower()
+    if fmt == "xlsx":
+        content = generate_xlsx_template("Medicines Template", MEDICINE_TEMPLATE_HEADERS, MEDICINE_SAMPLE_ROWS)
+        return Response(
+            content=content,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=medihisaab_medicines_sample_template.xlsx"},
+        )
+    content = generate_csv_template(MEDICINE_TEMPLATE_HEADERS, MEDICINE_SAMPLE_ROWS)
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=medihisaab_medicines_sample_template.csv"},
+    )
+
+
+@router.post("/medicines/import-preview", response_model=SuccessResponse[MedicineImportPreviewResponse], dependencies=[write_guard])
+async def preview_medicine_import(
+    file: UploadFile = File(...),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Parse and validate CSV/Excel medicine file, checking for duplicates and row errors."""
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The uploaded file is empty.",
+        )
+
+    try:
+        raw_rows = parse_tabular_upload(file_bytes, file.filename or "upload.csv")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to read file: {str(exc)}",
+        )
+
+    if not raw_rows:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The file does not contain any valid data rows.",
+        )
+
+    cursor = db.cursor()
+    # Cache existing medicines for duplicate checking
+    cursor.execute("SELECT id, LOWER(brand_name) AS brand_lower, barcode FROM medicines;")
+    existing_meds = cursor.fetchall()
+    existing_by_name = {m["brand_lower"]: m["id"] for m in existing_meds if m["brand_lower"]}
+    existing_by_barcode = {m["barcode"]: m["id"] for m in existing_meds if m["barcode"]}
+    cursor.close()
+
+    preview_rows: List[MedicineImportRowSchema] = []
+    seen_in_batch: set = set()
+
+    VALID_FORMS = {"TABLET", "CAPSULE", "SYRUP", "INJECTION", "OINTMENT", "DROPS", "POWDER", "RESPULES", "INHALER", "GEL", "CREAM", "OTHER"}
+    VALID_GST = {0.0, 5.0, 12.0, 18.0, 28.0}
+
+    for idx, r in enumerate(raw_rows, start=1):
+        errors: List[str] = []
+
+        brand_name_raw = find_col(r, ["Medicine Name", "Brand Name", "Name", "Medicine", "Item Name", "Product Name"])
+        brand_name = str(brand_name_raw).strip() if brand_name_raw is not None else ""
+        if not brand_name:
+            errors.append("Medicine Name is required.")
+
+        generic_salt_raw = find_col(r, ["Generic Composition", "Generic Salt", "Composition", "Generic", "Generic Name", "Salt", "Salt Composition"])
+        generic_salt = str(generic_salt_raw).strip() if generic_salt_raw is not None else ""
+
+        dosage_form_raw = find_col(r, ["Dosage Form", "Form", "Type"], "TABLET")
+        dosage_form = str(dosage_form_raw).strip().upper() if dosage_form_raw else "TABLET"
+        if dosage_form not in VALID_FORMS:
+            errors.append(f"Invalid dosage form '{dosage_form_raw}'. Allowed: {', '.join(sorted(VALID_FORMS))}.")
+            dosage_form = "OTHER"
+
+        strength_raw = find_col(r, ["Strength", "Power", "Potency"])
+        strength = str(strength_raw).strip() if strength_raw is not None else None
+
+        pack_size_raw = find_col(r, ["Pack Size", "Pack", "Units per pack", "Packaging"], 1)
+        try:
+            # Handle float or integer or string like '10 Tablets'
+            if isinstance(pack_size_raw, (int, float)):
+                pack_size = int(pack_size_raw)
+            else:
+                match = re.search(r"\d+", str(pack_size_raw))
+                pack_size = int(match.group(0)) if match else 1
+            if pack_size < 1:
+                errors.append("Pack size must be at least 1 unit.")
+                pack_size = 1
+        except Exception:
+            errors.append("Invalid pack size number.")
+            pack_size = 1
+
+        manufacturer_raw = find_col(r, ["Manufacturer", "Mfg", "Company", "Brand Manufacturer"])
+        manufacturer_name = str(manufacturer_raw).strip() if manufacturer_raw is not None else None
+
+        hsn_raw = find_col(r, ["HSN Code", "HSN"], "3004")
+        hsn_code = str(hsn_raw).strip() if hsn_raw else "3004"
+
+        gst_raw = find_col(r, ["GST Rate %", "GST Rate", "GST", "Tax Rate"], 12.0)
+        try:
+            gst_rate = float(gst_raw)
+            if gst_rate not in VALID_GST:
+                errors.append(f"GST rate {gst_rate}% is not a statutory slab (0, 5, 12, 18, 28%).")
+        except Exception:
+            errors.append("Invalid GST rate.")
+            gst_rate = 12.0
+
+        def parse_bool(col_names: List[str]) -> bool:
+            val = find_col(r, col_names)
+            if val is None:
+                return False
+            s = str(val).strip().lower()
+            return s in ("yes", "y", "true", "1", "t")
+
+        is_h1 = parse_bool(["Schedule H1", "Sch H1", "H1", "Schedule H1 (YES/NO)"])
+        is_h = parse_bool(["Schedule H", "Sch H", "H", "Schedule H (YES/NO)"])
+        is_narc = parse_bool(["Narcotic", "Schedule X", "Sch X", "Narcotic (YES/NO)"])
+
+        min_stock_raw = find_col(r, ["Min Stock Units", "Min Stock", "Minimum Stock", "Reorder Level"], 10)
+        try:
+            min_stock = max(0, int(float(min_stock_raw)))
+        except Exception:
+            min_stock = 10
+
+        rack_raw = find_col(r, ["Rack Location", "Rack", "Shelf"])
+        rack_location = str(rack_raw).strip() if rack_raw is not None else None
+
+        barcode_raw = find_col(r, ["Barcode", "EAN", "UPC"])
+        barcode = str(barcode_raw).strip() if barcode_raw is not None else None
+
+        # Duplicate checking
+        existing_id = None
+        status_label = "NEW"
+
+        if brand_name:
+            brand_lower = brand_name.lower()
+            if brand_lower in seen_in_batch:
+                errors.append("Duplicate medicine name found within this same import file.")
+            seen_in_batch.add(brand_lower)
+
+            if brand_lower in existing_by_name:
+                existing_id = existing_by_name[brand_lower]
+                status_label = "DUPLICATE"
+            elif barcode and barcode in existing_by_barcode:
+                existing_id = existing_by_barcode[barcode]
+                status_label = "DUPLICATE"
+
+        if errors:
+            status_label = "INVALID"
+
+        preview_rows.append(
+            MedicineImportRowSchema(
+                row_number=idx,
+                brand_name=brand_name,
+                generic_salt=generic_salt,
+                dosage_form=dosage_form,
+                strength=strength,
+                pack_size=pack_size,
+                manufacturer_name=manufacturer_name,
+                hsn_code=hsn_code,
+                gst_rate=gst_rate,
+                is_schedule_h1=is_h1,
+                is_schedule_h=is_h,
+                is_narcotic=is_narc,
+                min_stock_units=min_stock,
+                rack_location=rack_location,
+                barcode=barcode,
+                status=status_label,
+                existing_id=existing_id,
+                errors=errors,
+            )
+        )
+
+    total_rows = len(preview_rows)
+    valid_rows = sum(1 for r in preview_rows if r.status in ("NEW", "DUPLICATE") and not r.errors)
+    duplicate_rows = sum(1 for r in preview_rows if r.status == "DUPLICATE" and not r.errors)
+    error_rows = sum(1 for r in preview_rows if r.status == "INVALID" or r.errors)
+
+    staging_token = save_staged_import(
+        "MEDICINES",
+        [r.model_dump() for r in preview_rows],
+    )
+
+    return SuccessResponse(
+        data=MedicineImportPreviewResponse(
+            staging_token=staging_token,
+            total_rows=total_rows,
+            valid_rows=valid_rows,
+            duplicate_rows=duplicate_rows,
+            error_rows=error_rows,
+            rows=preview_rows,
+        )
+    )
+
+
+@router.post("/medicines/import-execute", response_model=SuccessResponse[MedicineImportExecuteResponse], dependencies=[write_guard])
+def execute_medicine_import(
+    payload: MedicineImportExecuteRequest,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Execute bulk medicine import committing verified rows with chosen duplicate policy."""
+    rows_to_process: List[Dict[str, Any]] = []
+
+    if payload.staging_token:
+        session = get_staged_import(payload.staging_token)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Staging session expired or not found. Please upload the file again to preview.",
+            )
+        rows_to_process = session["rows"]
+    elif payload.rows:
+        rows_to_process = [r.model_dump() for r in payload.rows]
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either staging_token or rows array must be provided.",
+        )
+
+    policy = payload.duplicate_policy.strip().upper()
+    if policy not in ("SKIP", "UPDATE"):
+        policy = "SKIP"
+
+    now_str = datetime.now(timezone.utc).isoformat()
+    inserted_count = 0
+    updated_count = 0
+    skipped_count = 0
+    failed_count = 0
+
+    cursor = db.cursor()
+    cursor.execute("BEGIN IMMEDIATE;")
+    try:
+        # Cache manufacturers
+        cursor.execute("SELECT id, LOWER(name) AS name_lower FROM manufacturers;")
+        mfg_map = {m["name_lower"]: m["id"] for m in cursor.fetchall()}
+
+        for r in rows_to_process:
+            if r.get("errors") or r.get("status") == "INVALID":
+                failed_count += 1
+                continue
+
+            brand_name = r["brand_name"].strip()
+            generic_salt = r.get("generic_salt") or ""
+            dosage_form = r.get("dosage_form") or "TABLET"
+            strength = r.get("strength")
+            pack_size = max(1, int(r.get("pack_size", 1)))
+            hsn_code = r.get("hsn_code") or "3004"
+            gst_rate = float(r.get("gst_rate", 12.0))
+            is_h1 = 1 if r.get("is_schedule_h1") else 0
+            is_h = 1 if r.get("is_schedule_h") else 0
+            is_narc = 1 if r.get("is_narcotic") else 0
+            min_stock = max(0, int(r.get("min_stock_units", 10)))
+            rack = r.get("rack_location")
+            barcode = r.get("barcode")
+
+            # Resolve manufacturer
+            manufacturer_id = None
+            mfg_name = r.get("manufacturer_name")
+            if mfg_name and mfg_name.strip():
+                clean_mfg = mfg_name.strip()
+                mfg_lower = clean_mfg.lower()
+                if mfg_lower in mfg_map:
+                    manufacturer_id = mfg_map[mfg_lower]
+                else:
+                    cursor.execute(
+                        "INSERT INTO manufacturers (name, is_active, created_at, updated_at) VALUES (?, 1, ?, ?);",
+                        (clean_mfg, now_str, now_str),
+                    )
+                    manufacturer_id = cursor.lastrowid
+                    mfg_map[mfg_lower] = manufacturer_id
+
+            # Check duplicate status
+            is_dup = r.get("status") == "DUPLICATE"
+            existing_id = r.get("existing_id")
+
+            if not is_dup:
+                # Re-verify against database
+                cursor.execute(
+                    "SELECT id FROM medicines WHERE LOWER(brand_name) = ? OR (barcode IS NOT NULL AND barcode != '' AND barcode = ?);",
+                    (brand_name.lower(), barcode),
+                )
+                found = cursor.fetchone()
+                if found:
+                    is_dup = True
+                    existing_id = found[0]
+
+            if is_dup:
+                if policy == "SKIP":
+                    skipped_count += 1
+                    continue
+                # UPDATE existing
+                cursor.execute(
+                    """
+                    UPDATE medicines SET
+                        generic_salt = ?,
+                        dosage_form = ?,
+                        strength = ?,
+                        pack_size = ?,
+                        manufacturer_id = COALESCE(?, manufacturer_id),
+                        hsn_code = ?,
+                        gst_rate = ?,
+                        is_schedule_h1 = ?,
+                        is_schedule_h = ?,
+                        is_narcotic = ?,
+                        min_stock_units = ?,
+                        rack_location = COALESCE(?, rack_location),
+                        barcode = COALESCE(?, barcode),
+                        updated_at = ?
+                    WHERE id = ?;
+                    """,
+                    (
+                        generic_salt, dosage_form, strength, pack_size,
+                        manufacturer_id, hsn_code, gst_rate, is_h1, is_h,
+                        is_narc, min_stock, rack, barcode, now_str, existing_id,
+                    ),
+                )
+                updated_count += 1
+            else:
+                # INSERT new medicine
+                cursor.execute(
+                    """
+                    INSERT INTO medicines (
+                        brand_name, generic_salt, dosage_form, strength, pack_size,
+                        manufacturer_id, hsn_code, gst_rate, is_schedule_h1, is_schedule_h,
+                        is_narcotic, min_stock_units, rack_location, barcode, is_active,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);
+                    """,
+                    (
+                        brand_name, generic_salt, dosage_form, strength, pack_size,
+                        manufacturer_id, hsn_code, gst_rate, is_h1, is_h,
+                        is_narc, min_stock, rack, barcode, now_str, now_str,
+                    ),
+                )
+                inserted_count += 1
+
+        cursor.execute("COMMIT;")
+    except Exception as exc:
+        cursor.execute("ROLLBACK;")
+        cursor.close()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Medicine bulk import transaction failed: {str(exc)}",
+        )
+    finally:
+        cursor.close()
+
+    if payload.staging_token:
+        clear_staged_import(payload.staging_token)
+
+    summary_msg = (
+        f"Import completed: {inserted_count} new medicine(s) inserted, "
+        f"{updated_count} updated, {skipped_count} skipped, {failed_count} invalid."
+    )
+
+    return SuccessResponse(
+        data=MedicineImportExecuteResponse(
+            success=True,
+            inserted_count=inserted_count,
+            updated_count=updated_count,
+            skipped_count=skipped_count,
+            failed_count=failed_count,
+            message=summary_msg,
+        )
+    )
+
 
 
 # ==============================================================================

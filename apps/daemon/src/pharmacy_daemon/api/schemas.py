@@ -1403,4 +1403,96 @@ class HardwareTestResponse(BaseModel):
     ascii_preview: Optional[str] = None
 
 
+# 10. Bulk Import Schemas (Medicines & Opening Stock)
+class MedicineImportRowSchema(BaseModel):
+    row_number: int
+    brand_name: str
+    generic_salt: Optional[str] = ""
+    dosage_form: str = "TABLET"
+    strength: Optional[str] = None
+    pack_size: int = 1
+    manufacturer_name: Optional[str] = None
+    hsn_code: str = "3004"
+    gst_rate: float = 12.0
+    is_schedule_h1: bool = False
+    is_schedule_h: bool = False
+    is_narcotic: bool = False
+    min_stock_units: int = 10
+    rack_location: Optional[str] = None
+    barcode: Optional[str] = None
+    status: str = "NEW"  # NEW, DUPLICATE, INVALID
+    existing_id: Optional[int] = None
+    errors: List[str] = []
+
+
+class MedicineImportPreviewResponse(BaseModel):
+    staging_token: str
+    total_rows: int
+    valid_rows: int
+    duplicate_rows: int
+    error_rows: int
+    rows: List[MedicineImportRowSchema]
+
+
+class MedicineImportExecuteRequest(BaseModel):
+    staging_token: Optional[str] = None
+    duplicate_policy: str = "SKIP"  # SKIP or UPDATE
+    rows: Optional[List[MedicineImportRowSchema]] = None
+
+
+class MedicineImportExecuteResponse(BaseModel):
+    success: bool
+    inserted_count: int
+    updated_count: int
+    skipped_count: int
+    failed_count: int
+    message: str
+
+
+class OpeningStockImportRowSchema(BaseModel):
+    row_number: int
+    medicine_name: str
+    medicine_code: Optional[str] = None
+    medicine_id: Optional[int] = None
+    batch_number: str
+    expiry_date: str
+    quantity: int = Field(..., ge=1, description="Quantity in packs")
+    pack_size: int = 1
+    purchase_rate_rupees: float = 0.0
+    purchase_rate_paise: int = 0
+    mrp_rupees: float = 0.0
+    mrp_paise: int = 0
+    supplier_name: Optional[str] = None
+    status: str = "NEW"  # NEW, DUPLICATE, INVALID
+    existing_batch_id: Optional[int] = None
+    existing_quantity: Optional[int] = None
+    errors: List[str] = []
+
+
+class OpeningStockImportPreviewResponse(BaseModel):
+    staging_token: str
+    total_rows: int
+    valid_rows: int
+    duplicate_rows: int
+    error_rows: int
+    rows: List[OpeningStockImportRowSchema]
+
+
+class OpeningStockImportExecuteRequest(BaseModel):
+    staging_token: Optional[str] = None
+    duplicate_policy: str = "SKIP"  # SKIP or MERGE
+    rows: Optional[List[OpeningStockImportRowSchema]] = None
+
+
+class OpeningStockImportExecuteResponse(BaseModel):
+    success: bool
+    inserted_batches: int
+    merged_batches: int
+    skipped_batches: int
+    failed_batches: int
+    total_units_added: int
+    message: str
+
+
+
 

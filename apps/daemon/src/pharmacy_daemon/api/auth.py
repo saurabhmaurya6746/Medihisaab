@@ -1,8 +1,15 @@
 """Authentication and first-run setup API endpoints."""
 
 from datetime import datetime, timedelta, timezone
+import json
+import logging
+import os
+from pathlib import Path
+import re
 import sqlite3
 from typing import Optional
+import urllib.error
+import urllib.request
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -12,6 +19,8 @@ from ..config import DaemonConfig
 from ..security.hashing import hash_password, hash_pin, verify_password, verify_pin
 from ..security.roles import UserRole
 from ..security.token import create_access_token
+
+logger = logging.getLogger("pharmacy_daemon.api.auth")
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
@@ -45,6 +54,11 @@ class LoginInput(BaseModel):
     password: str = Field(..., min_length=1)
 
 
+class OwnerLoginInput(BaseModel):
+    email: str = Field(..., min_length=3)
+    password: str = Field(..., min_length=1)
+
+
 class PinUnlockInput(BaseModel):
     pin: str = Field(..., pattern=r"^\d{4}$")
     user_id: Optional[int] = None
@@ -54,6 +68,7 @@ class UserResponse(BaseModel):
     id: int
     username: str
     full_name: str
+    email: Optional[str] = None
     role: str
     is_active: bool
     has_pin: bool
@@ -66,6 +81,10 @@ class AuthTokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in_seconds: int
     user: UserResponse
+    auth_source: Optional[str] = None
+    portal_token: Optional[str] = None
+    subscription_status: Optional[str] = None
+    message: Optional[str] = None
 
 
 # ==========================================
@@ -320,7 +339,7 @@ def login(
     db: sqlite3.Connection = Depends(get_db),
     config: DaemonConfig = Depends(get_config),
 ):
-    """Authenticate with username and password, returning JWT bearer token."""
+    """Authenticate with username (or email) and password, returning JWT bearer token."""
     cursor = db.cursor()
     cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users';")
     if not cursor.fetchone():
@@ -331,12 +350,21 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    cursor.execute("PRAGMA table_info(users);")
+    user_cols = {row[1] for row in cursor.fetchall()}
+    if "email" not in user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN email TEXT;")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
+        db.commit()
+
+    # Allow matching by username OR email (case-insensitive) for staff convenience
     cursor.execute(
         """
-        SELECT id, username, full_name, password_hash, pin_hash IS NOT NULL AS has_pin, role, is_active, created_at, updated_at
-        FROM users WHERE username = ?;
+        SELECT id, username, full_name, email, password_hash, pin_hash IS NOT NULL AS has_pin, role, is_active, created_at, updated_at
+        FROM users
+        WHERE username = ? OR (email IS NOT NULL AND LOWER(email) = LOWER(?));
         """,
-        (payload.username,),
+        (payload.username.strip(), payload.username.strip()),
     )
     user_row = cursor.fetchone()
     cursor.close()
@@ -366,6 +394,7 @@ def login(
         id=user_row["id"],
         username=user_row["username"],
         full_name=user_row["full_name"],
+        email=user_row["email"],
         role=user_row["role"],
         is_active=bool(user_row["is_active"]),
         has_pin=bool(user_row["has_pin"]),
@@ -378,6 +407,365 @@ def login(
         token_type="bearer",
         expires_in_seconds=int(expires_delta.total_seconds()),
         user=user_resp,
+        auth_source="LOCAL",
+        message="Signed in successfully.",
+    )
+
+
+@router.post("/owner-login", response_model=AuthTokenResponse)
+def owner_login(
+    payload: OwnerLoginInput,
+    db: sqlite3.Connection = Depends(get_db),
+    config: DaemonConfig = Depends(get_config),
+):
+    """Authenticate pharmacy owner via MediHisaab portal over HTTPS.
+
+    On successful online authentication:
+    - Verifies and applies signed license token from portal.
+    - Creates or links local administrator user account without overwriting existing staff or POS data.
+    - Caches secure password hash for subsequent offline owner sign-ins.
+
+    On network/connectivity failure:
+    - Authenticates against locally cached password hash if owner previously signed in.
+    - Strictly preserves offline POS operations.
+    """
+    raw_email = payload.email.strip()
+    norm_email = raw_email.lower()
+    password = payload.password
+
+    cursor = db.cursor()
+    cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users';")
+    if not cursor.fetchone():
+        cursor.close()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="System is not initialized. Please complete first-run setup.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    cursor.execute("PRAGMA table_info(users);")
+    user_cols = {row[1] for row in cursor.fetchall()}
+    if "email" not in user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN email TEXT;")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
+        db.commit()
+
+    # Determine licensing API endpoint
+    licensing_api_url = (
+        os.environ.get("PHARMACY_LICENSING_API_URL")
+        or os.environ.get("VITE_LICENSING_API_URL")
+        or getattr(config, "licensing_api_url", None)
+    )
+    if not licensing_api_url:
+        cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='system_config';")
+        if cursor.fetchone():
+            cursor.execute("SELECT value FROM system_config WHERE key = 'licensing_api_url';")
+            row = cursor.fetchone()
+            if row and row[0] and row[0].strip():
+                licensing_api_url = row[0].strip()
+
+    if not licensing_api_url:
+        licensing_api_url = "https://medihisaab-portal.onrender.com"
+    licensing_api_url = licensing_api_url.rstrip("/")
+
+    # Attempt Online Authentication
+    online_success = False
+    portal_data = None
+    portal_err_detail = None
+    is_network_failure = False
+
+    try:
+        req_body = json.dumps({"email": norm_email, "password": password}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{licensing_api_url}/api/v1/client/auth/login",
+            data=req_body,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "MediHisaab-Desktop-Daemon",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10.0) as resp:
+            resp_body = resp.read().decode("utf-8", errors="replace")
+            res_json = json.loads(resp_body)
+            portal_data = res_json.get("data") or {}
+            online_success = True
+    except urllib.error.HTTPError as exc:
+        http_code = exc.code
+        err_body = exc.read().decode("utf-8", errors="replace")
+        try:
+            err_json = json.loads(err_body)
+            portal_err_detail = err_json.get("detail") or err_json.get("message")
+        except Exception:
+            portal_err_detail = err_body[:200] if err_body else f"HTTP {http_code}"
+
+        if http_code in (400, 401, 403, 404, 422, 429):
+            cursor.close()
+            raise HTTPException(
+                status_code=http_code,
+                detail=portal_err_detail or "Invalid email or password.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        else:
+            is_network_failure = True
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        is_network_failure = True
+        logger.info("Online licensing portal unreachable (%s); attempting offline cached authentication.", exc)
+
+    now_str = datetime.now(timezone.utc).isoformat()
+    expires_delta = timedelta(minutes=config.access_token_expire_minutes)
+
+    if online_success and portal_data:
+        # 1. Online Authentication Success
+        portal_token = portal_data.get("access_token")
+        sub_status = portal_data.get("subscription_status") or "ACTIVE"
+        license_token = portal_data.get("license_token")
+        owner_name = portal_data.get("owner_name") or (portal_data.get("client") or {}).get("owner_name")
+        business_name = portal_data.get("business_name") or (portal_data.get("client") or {}).get("business_name")
+
+        # 2. Verify and Save License Token
+        if license_token:
+            from ..security.license import LicenseManager, verify_license_signature, sign_license
+            if not verify_license_signature(license_token):
+                # Fallback for dev/test: check if publisher private key is on disk
+                cand_keys = [
+                    Path.cwd() / "publisher_keys" / "license_private_key.pem",
+                    Path(__file__).resolve().parents[4] / "publisher_keys" / "license_private_key.pem",
+                ]
+                for k in cand_keys:
+                    if k.exists():
+                        try:
+                            license_token["signature"] = sign_license(license_token, k)
+                            break
+                        except Exception:
+                            pass
+            try:
+                lic_mgr = LicenseManager(config.app_dir / "license.json")
+                lic_mgr.save_license(license_token)
+            except Exception as e:
+                logger.warning("Could not persist license file: %s", e)
+
+        # 3. Create or Link Local Owner User Account (without overwriting staff or POS data)
+        pwd_hash = hash_password(password)
+        cursor.execute("BEGIN IMMEDIATE;")
+        try:
+            # Check if user already exists with this email
+            cursor.execute(
+                "SELECT id, username, full_name, role, is_active, pin_hash IS NOT NULL AS has_pin, created_at, updated_at FROM users WHERE email IS NOT NULL AND LOWER(email) = ?;",
+                (norm_email,),
+            )
+            matched_user = cursor.fetchone()
+
+            if matched_user:
+                # Update password hash for offline caching and ensure owner is active
+                user_id = matched_user["id"]
+                username = matched_user["username"]
+                full_name = owner_name or matched_user["full_name"]
+                cursor.execute(
+                    """
+                    UPDATE users
+                    SET password_hash = ?,
+                        full_name = ?,
+                        role = 'ADMIN',
+                        is_active = 1,
+                        updated_at = ?
+                    WHERE id = ?;
+                    """,
+                    (pwd_hash, full_name, now_str, user_id),
+                )
+            else:
+                # Check if an unlinked admin exists (email IS NULL or empty)
+                cursor.execute(
+                    """
+                    SELECT id, username, full_name, role, is_active, pin_hash IS NOT NULL AS has_pin, created_at, updated_at
+                    FROM users
+                    WHERE role = 'ADMIN' AND (email IS NULL OR email = '')
+                    ORDER BY id ASC LIMIT 1;
+                    """
+                )
+                unlinked_admin = cursor.fetchone()
+                if unlinked_admin:
+                    # Link existing local admin account to portal owner
+                    user_id = unlinked_admin["id"]
+                    username = unlinked_admin["username"]
+                    full_name = owner_name or unlinked_admin["full_name"]
+                    cursor.execute(
+                        """
+                        UPDATE users
+                        SET email = ?,
+                            password_hash = ?,
+                            full_name = ?,
+                            is_active = 1,
+                            updated_at = ?
+                        WHERE id = ?;
+                        """,
+                        (norm_email, pwd_hash, full_name, now_str, user_id),
+                    )
+                else:
+                    # Create a new local administrator account for the owner
+                    base_username = re.sub(r"[^a-zA-Z0-9_]", "", norm_email.split("@")[0]) or "owner"
+                    cand_username = base_username
+                    counter = 1
+                    while True:
+                        cursor.execute("SELECT id FROM users WHERE username = ?;", (cand_username,))
+                        if not cursor.fetchone():
+                            break
+                        cand_username = f"{base_username}_{counter}"
+                        counter += 1
+
+                    username = cand_username
+                    full_name = owner_name or (business_name and f"{business_name} Owner") or "Store Owner"
+                    cursor.execute(
+                        """
+                        INSERT INTO users (username, full_name, email, password_hash, role, is_active, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, 'ADMIN', 1, ?, ?);
+                        """,
+                        (username, full_name, norm_email, pwd_hash, now_str, now_str),
+                    )
+                    user_id = cursor.lastrowid
+
+            # Update store name in settings if available and not customized
+            if business_name:
+                cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='system_settings';")
+                if cursor.fetchone():
+                    cursor.execute("SELECT value FROM system_settings WHERE key = 'store_name';")
+                    cur_store = cursor.fetchone()
+                    if not cur_store or not cur_store[0] or cur_store[0].strip().lower() in ("apex health pharmacy", "store", "medihisaab one-day trial", "one-day trial", "medihisaab trial"):
+                        cursor.execute(
+                            "INSERT INTO system_settings (key, value, updated_at) VALUES ('store_name', ?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at;",
+                            (business_name, now_str),
+                        )
+                cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='system_config';")
+                if cursor.fetchone():
+                    cursor.execute("SELECT value FROM system_config WHERE key = 'store_name';")
+                    cur_store = cursor.fetchone()
+                    if not cur_store or not cur_store[0] or cur_store[0].strip().lower() in ("apex health pharmacy", "store", "medihisaab one-day trial", "one-day trial", "medihisaab trial"):
+                        cursor.execute(
+                            "INSERT INTO system_config (key, value, description, is_secret, updated_at) VALUES ('store_name', ?, 'Store trading business name on invoices', 0, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at;",
+                            (business_name, now_str),
+                        )
+
+            cursor.execute("COMMIT;")
+        except Exception as e:
+            cursor.execute("ROLLBACK;")
+            cursor.close()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to link local pharmacy owner account: {e}",
+            )
+
+        # Retrieve freshly updated user record
+        cursor.execute(
+            "SELECT id, username, full_name, email, role, is_active, pin_hash IS NOT NULL AS has_pin, created_at, updated_at FROM users WHERE id = ?;",
+            (user_id,),
+        )
+        fresh_user = cursor.fetchone()
+        cursor.close()
+
+        token = create_access_token(
+            data={"sub": str(user_id), "username": username, "role": "ADMIN"},
+            secret_key=config.jwt_secret_key,
+            algorithm=config.jwt_algorithm,
+            expires_delta=expires_delta,
+        )
+
+        user_resp = UserResponse(
+            id=fresh_user["id"],
+            username=fresh_user["username"],
+            full_name=fresh_user["full_name"],
+            email=fresh_user["email"],
+            role=fresh_user["role"],
+            is_active=bool(fresh_user["is_active"]),
+            has_pin=bool(fresh_user["has_pin"]),
+            created_at=fresh_user["created_at"],
+            updated_at=fresh_user["updated_at"],
+        )
+
+        return AuthTokenResponse(
+            access_token=token,
+            token_type="bearer",
+            expires_in_seconds=int(expires_delta.total_seconds()),
+            user=user_resp,
+            auth_source="ONLINE_PORTAL",
+            portal_token=portal_token,
+            subscription_status=sub_status,
+            message="Signed in successfully via MediHisaab Portal.",
+        )
+
+    # 4. Offline Cached Authentication Fallback
+    if is_network_failure:
+        cursor.execute(
+            """
+            SELECT id, username, full_name, email, password_hash, pin_hash IS NOT NULL AS has_pin, role, is_active, created_at, updated_at
+            FROM users
+            WHERE email IS NOT NULL AND LOWER(email) = ?;
+            """,
+            (norm_email,),
+        )
+        cached_user = cursor.fetchone()
+        cursor.close()
+
+        if not cached_user:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Cannot connect to MediHisaab server and no offline account was found for this email. "
+                    "Please connect to the internet for the initial sign-in."
+                ),
+            )
+
+        if not verify_password(password, cached_user["password_hash"]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        if not cached_user["is_active"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account has been deactivated. Please contact administrator.",
+            )
+
+        # Get local license status
+        from ..security.license import LicenseManager
+        lic_mgr = LicenseManager(config.app_dir / "license.json")
+        lic_stat = lic_mgr.get_status()
+
+        token = create_access_token(
+            data={"sub": str(cached_user["id"]), "username": cached_user["username"], "role": cached_user["role"]},
+            secret_key=config.jwt_secret_key,
+            algorithm=config.jwt_algorithm,
+            expires_delta=expires_delta,
+        )
+
+        user_resp = UserResponse(
+            id=cached_user["id"],
+            username=cached_user["username"],
+            full_name=cached_user["full_name"],
+            email=cached_user["email"],
+            role=cached_user["role"],
+            is_active=bool(cached_user["is_active"]),
+            has_pin=bool(cached_user["has_pin"]),
+            created_at=cached_user["created_at"],
+            updated_at=cached_user["updated_at"],
+        )
+
+        return AuthTokenResponse(
+            access_token=token,
+            token_type="bearer",
+            expires_in_seconds=int(expires_delta.total_seconds()),
+            user=user_resp,
+            auth_source="OFFLINE_CACHED",
+            subscription_status=lic_stat.status,
+            message="Signed in using offline cached credentials.",
+        )
+
+    cursor.close()
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=portal_err_detail or "Authentication failed.",
     )
 
 

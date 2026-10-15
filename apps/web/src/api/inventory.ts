@@ -16,8 +16,12 @@ import type {
   WantBookCreateInput,
   WantBookStatusUpdateInput,
   WantBookStatus,
+  OpeningStockImportPreviewResponse,
+  OpeningStockImportExecuteInput,
+  OpeningStockImportExecuteResponse,
 } from "@pharmacy/api-contracts";
-import { apiClient } from "./client";
+export type { OpeningStockDuplicatePolicy } from "@pharmacy/api-contracts";
+import { apiClient, getStoredToken, ApiError } from "./client";
 
 /**
  * Expiry Dashboard & Batches
@@ -189,3 +193,53 @@ export async function deleteWantBookItem(id: number): Promise<void> {
     { method: "DELETE" }
   );
 }
+
+// ==========================================
+// 5. BULK OPENING STOCK IMPORT
+// ==========================================
+
+export async function downloadOpeningStockImportTemplate(format: "csv" | "xlsx" = "xlsx"): Promise<void> {
+  const token = getStoredToken();
+  const res = await fetch(`/api/v1/inventory/opening-stock/import/template?format=${format}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, "Failed to download opening stock template");
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `medihisaab_opening_stock_template.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function previewOpeningStockImport(file: File): Promise<OpeningStockImportPreviewResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const resp = await apiClient<ApiSuccessEnvelope<OpeningStockImportPreviewResponse>>(
+    "/api/v1/inventory/opening-stock/import-preview",
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+  return resp.data;
+}
+
+export async function executeOpeningStockImport(
+  payload: OpeningStockImportExecuteInput
+): Promise<OpeningStockImportExecuteResponse> {
+  const resp = await apiClient<ApiSuccessEnvelope<OpeningStockImportExecuteResponse>>(
+    "/api/v1/inventory/opening-stock/import-execute",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+  return resp.data;
+}
+

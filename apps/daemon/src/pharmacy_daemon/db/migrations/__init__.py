@@ -12,6 +12,7 @@ from . import m005_sales_pos_and_compliance
 from . import m006_inventory_expiry_and_want_book
 from . import m007_khata_returns_and_wastage
 from . import m008_compliance_backups_and_reconciliation
+from . import m010_user_email_and_portal_link
 
 logger = logging.getLogger("pharmacy_daemon.db.migrations")
 
@@ -25,6 +26,7 @@ MIGRATIONS = [
     m006_inventory_expiry_and_want_book,
     m007_khata_returns_and_wastage,
     m008_compliance_backups_and_reconciliation,
+    m010_user_email_and_portal_link,
 ]
 
 

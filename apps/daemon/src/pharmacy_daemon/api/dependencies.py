@@ -66,7 +66,7 @@ def get_current_user(
 
     cursor = db.cursor()
     cursor.execute(
-        "SELECT id, username, full_name, role, is_active, pin_hash IS NOT NULL AS has_pin, created_at, updated_at FROM users WHERE id = ?;",
+        "SELECT id, username, full_name, email, role, is_active, pin_hash IS NOT NULL AS has_pin, created_at, updated_at FROM users WHERE id = ?;",
         (user_id,),
     )
     user_row = cursor.fetchone()

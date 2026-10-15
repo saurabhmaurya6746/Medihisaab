@@ -3,7 +3,9 @@ import type {
   User,
   FirstRunSetupInput,
   LoginInput,
+  OwnerLoginInput,
   PinUnlockInput,
+  AuthTokenResponse,
   SystemSetupStatusResponse,
 } from "@pharmacy/api-contracts";
 import * as authApi from "../api/auth";
@@ -17,6 +19,7 @@ interface AuthContextValue {
   error: string | null;
   refreshSession: () => Promise<void>;
   performLogin: (input: LoginInput) => Promise<void>;
+  performOwnerLogin: (input: OwnerLoginInput) => Promise<AuthTokenResponse>;
   performPinSwitch: (input: PinUnlockInput) => Promise<void>;
   performFirstRunSetup: (input: FirstRunSetupInput) => Promise<void>;
   performLogout: () => void;
@@ -111,6 +114,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const performOwnerLogin = async (input: OwnerLoginInput): Promise<AuthTokenResponse> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const resp = await authApi.ownerLogin(input);
+      setStoredToken(resp.access_token);
+      setUser(resp.user);
+      return resp;
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+        throw err;
+      }
+      const genericMsg = err instanceof Error ? err.message : "Failed to sign in as owner.";
+      setError(genericMsg);
+      throw new Error(genericMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const performPinSwitch = async (input: PinUnlockInput) => {
     setIsLoading(true);
     setError(null);
@@ -171,6 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     error,
     refreshSession,
     performLogin,
+    performOwnerLogin,
     performPinSwitch,
     performFirstRunSetup,
     performLogout,

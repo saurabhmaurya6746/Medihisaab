@@ -254,3 +254,54 @@ export interface WantBookItem {
   created_at: string;
   updated_at: string;
 }
+
+/**
+ * Opening Stock and Batches Bulk Import contracts.
+ */
+export type OpeningStockDuplicatePolicy = "SKIP" | "MERGE";
+
+export interface OpeningStockImportRow {
+  row_number: number;
+  medicine_name: string;
+  medicine_code?: string;
+  medicine_id?: number | null;
+  batch_number: string;
+  expiry_date: string;
+  quantity: number; // In packs
+  pack_size: number;
+  purchase_rate_rupees: number;
+  purchase_rate_paise: number;
+  mrp_rupees: number;
+  mrp_paise: number;
+  supplier_name?: string | null;
+  status: "NEW" | "DUPLICATE" | "INVALID";
+  existing_batch_id?: number | null;
+  existing_quantity?: number | null;
+  errors: string[];
+}
+
+export interface OpeningStockImportPreviewResponse {
+  staging_token: string;
+  total_rows: number;
+  valid_rows: number;
+  duplicate_rows: number;
+  error_rows: number;
+  rows: OpeningStockImportRow[];
+}
+
+export interface OpeningStockImportExecuteInput {
+  staging_token?: string;
+  duplicate_policy: OpeningStockDuplicatePolicy;
+  rows?: OpeningStockImportRow[];
+}
+
+export interface OpeningStockImportExecuteResponse {
+  success: boolean;
+  inserted_batches: number;
+  merged_batches: number;
+  skipped_batches: number;
+  failed_batches: number;
+  total_units_added: number;
+  message: string;
+}
+

@@ -5,43 +5,79 @@ import { ContactAdminModal } from "./ContactAdminModal";
 import { getLicenseStatus, type LicenseStatusInfo } from "../api/system";
 import { MEDIHISAAB_ICON_BASE64 } from "../assets/brand";
 
+type LoginMode = "OWNER" | "STAFF";
+
 export const LoginView: React.FC = () => {
-  const { performLogin, storeName, error: globalError, clearError } = useAuth();
-  const [username, setUsername] = useState<string>("");
-  const [password, setPassword] = useState<string>("");
+  const { performLogin, performOwnerLogin, storeName, error: globalError, clearError } = useAuth();
+  const [mode, setMode] = useState<LoginMode>("OWNER");
+  const [ownerEmail, setOwnerEmail] = useState<string>("");
+  const [ownerPassword, setOwnerPassword] = useState<string>("");
+  const [staffUsername, setStaffUsername] = useState<string>("");
+  const [staffPassword, setStaffPassword] = useState<string>("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
   const [showContactAdminModal, setShowContactAdminModal] = useState<boolean>(false);
   const [licenseInfo, setLicenseInfo] = useState<LicenseStatusInfo | null>(null);
 
+  const emailRef = useRef<HTMLInputElement>(null);
   const usernameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Autofocus username on mount
-    usernameRef.current?.focus();
+    if (mode === "OWNER") {
+      emailRef.current?.focus();
+    } else {
+      usernameRef.current?.focus();
+    }
     getLicenseStatus().then(setLicenseInfo).catch(() => {});
-  }, []);
+  }, [mode]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleOwnerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
     setLocalError(null);
 
-    const cleanUser = username.trim();
+    const cleanEmail = ownerEmail.trim();
+    if (!cleanEmail) {
+      setLocalError("Please enter your email address.");
+      emailRef.current?.focus();
+      return;
+    }
+    if (!ownerPassword) {
+      setLocalError("Please enter your portal password.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await performOwnerLogin({ email: cleanEmail, password: ownerPassword });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to sign in. Please verify your email and password.";
+      setLocalError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStaffSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearError();
+    setLocalError(null);
+
+    const cleanUser = staffUsername.trim();
     if (!cleanUser) {
-      setLocalError("Please enter your operator username.");
+      setLocalError("Please enter your operator username or email.");
       usernameRef.current?.focus();
       return;
     }
-    if (!password) {
+    if (!staffPassword) {
       setLocalError("Please enter your password.");
       return;
     }
 
     setIsLoading(true);
     try {
-      await performLogin({ username: cleanUser, password });
+      await performLogin({ username: cleanUser, password: staffPassword });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Invalid username or password.";
       setLocalError(msg);
@@ -68,6 +104,123 @@ export const LoginView: React.FC = () => {
         </div>
 
         <div className="auth-body">
+          {/* Mode Switch Tabs: Pharmacy Owner (Portal) vs Staff / Operator (Local) */}
+          <div
+            style={{
+              display: "flex",
+              borderBottom: "1px solid var(--border-subtle)",
+              marginBottom: "18px",
+              backgroundColor: "rgba(255, 255, 255, 0.03)",
+              borderRadius: "8px 8px 0 0",
+              overflow: "hidden",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setMode("OWNER");
+                setLocalError(null);
+                clearError();
+              }}
+              style={{
+                flex: 1,
+                padding: "11px 14px",
+                border: "none",
+                borderBottom: mode === "OWNER" ? "2px solid #0284c7" : "2px solid transparent",
+                background: mode === "OWNER" ? "var(--bg-surface)" : "transparent",
+                color: mode === "OWNER" ? "var(--text-title)" : "var(--text-muted)",
+                fontWeight: mode === "OWNER" ? 600 : 500,
+                fontSize: "0.88rem",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <span>🏢</span>
+              <span>Pharmacy Owner</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("STAFF");
+                setLocalError(null);
+                clearError();
+              }}
+              style={{
+                flex: 1,
+                padding: "11px 14px",
+                border: "none",
+                borderBottom: mode === "STAFF" ? "2px solid #0284c7" : "2px solid transparent",
+                background: mode === "STAFF" ? "var(--bg-surface)" : "transparent",
+                color: mode === "STAFF" ? "var(--text-title)" : "var(--text-muted)",
+                fontWeight: mode === "STAFF" ? 600 : 500,
+                fontSize: "0.88rem",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <span>👤</span>
+              <span>Staff / Operator</span>
+            </button>
+          </div>
+
+          {/* Expired License Notice - Clarifies read-only data access vs credential errors */}
+          {licenseInfo && (licenseInfo.status === "EXPIRED" || licenseInfo.status === "INVALID_SIGNATURE") && (
+            <div
+              style={{
+                marginBottom: "16px",
+                padding: "10px 14px",
+                borderRadius: "8px",
+                backgroundColor: "rgba(239, 68, 68, 0.12)",
+                border: "1px solid rgba(239, 68, 68, 0.35)",
+                fontSize: "0.82rem",
+                color: "#fca5a5",
+                lineHeight: 1.45,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                <span style={{ fontSize: "1rem" }}>⚠️</span>
+                <div style={{ flex: 1 }}>
+                  <strong style={{ color: "#f87171" }}>
+                    {licenseInfo.status === "EXPIRED" ? "Subscription / Trial Expired:" : "License Verification Required:"}
+                  </strong>
+                  <div style={{ marginTop: "2px", color: "var(--text-main)" }}>
+                    {licenseInfo.message || `License expired on ${licenseInfo.expiry_date || "earlier date"}.`}
+                  </div>
+                  <div style={{ marginTop: "4px", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                    You can still sign in to review, search, and export all historical invoices, ledgers, and inventory.
+                  </div>
+                  <div style={{ marginTop: "6px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowContactAdminModal(true)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        color: "#38bdf8",
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        textDecoration: "underline",
+                        fontSize: "0.82rem",
+                      }}
+                    >
+                      Renew Subscription / Contact Admin →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Error Banner */}
           {displayError && (
             <div className="auth-error-banner">
               <svg
@@ -87,51 +240,111 @@ export const LoginView: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label form-label-required" htmlFor="login-username">
-                Operator Username
-              </label>
-              <input
-                ref={usernameRef}
-                id="login-username"
-                className="form-input"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
-                autoComplete="username"
-                disabled={isLoading}
-              />
-            </div>
+          {mode === "OWNER" ? (
+            <form onSubmit={handleOwnerSubmit}>
+              <div className="form-group">
+                <label className="form-label form-label-required" htmlFor="login-email">
+                  Email address
+                </label>
+                <input
+                  ref={emailRef}
+                  id="login-email"
+                  className="form-input"
+                  type="email"
+                  value={ownerEmail}
+                  onChange={(e) => setOwnerEmail(e.target.value)}
+                  placeholder="Enter portal email (e.g. owner@pharmacy.com)"
+                  autoComplete="email"
+                  disabled={isLoading}
+                />
+              </div>
 
-            <div className="form-group">
-              <label className="form-label form-label-required" htmlFor="login-password">
-                Password
-              </label>
-              <input
-                id="login-password"
-                className="form-input"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-                autoComplete="current-password"
-                disabled={isLoading}
-              />
-            </div>
+              <div className="form-group">
+                <label className="form-label form-label-required" htmlFor="login-password">
+                  Password
+                </label>
+                <input
+                  id="login-password"
+                  className="form-input"
+                  type="password"
+                  value={ownerPassword}
+                  onChange={(e) => setOwnerPassword(e.target.value)}
+                  placeholder="Enter portal account password"
+                  autoComplete="current-password"
+                  disabled={isLoading}
+                />
+              </div>
 
-            <div style={{ marginTop: 20 }}>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ width: "100%", padding: "10px 16px", fontSize: "0.95rem" }}
-                disabled={isLoading}
+              <div style={{ marginTop: 20 }}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ width: "100%", padding: "10px 16px", fontSize: "0.95rem" }}
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Signing In with Portal..." : "Sign In as Owner [Enter]"}
+                </button>
+              </div>
+
+              <div
+                style={{
+                  marginTop: "12px",
+                  fontSize: "0.78rem",
+                  color: "var(--text-muted)",
+                  textAlign: "center",
+                  lineHeight: 1.4,
+                }}
               >
-                {isLoading ? "Signing In..." : "Sign In to Terminal [Enter]"}
-              </button>
-            </div>
-          </form>
+                Sign in using your MediHisaab Web Portal account credentials. Connects to server to sync subscription and securely caches credentials for subsequent offline POS use.
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleStaffSubmit}>
+              <div className="form-group">
+                <label className="form-label form-label-required" htmlFor="login-username">
+                  Operator Username or Email
+                </label>
+                <input
+                  ref={usernameRef}
+                  id="login-username"
+                  className="form-input"
+                  type="text"
+                  value={staffUsername}
+                  onChange={(e) => setStaffUsername(e.target.value)}
+                  placeholder="Enter username or email"
+                  autoComplete="username"
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label form-label-required" htmlFor="login-password">
+                  Password
+                </label>
+                <input
+                  id="login-password"
+                  className="form-input"
+                  type="password"
+                  value={staffPassword}
+                  onChange={(e) => setStaffPassword(e.target.value)}
+                  placeholder="Enter operator password"
+                  autoComplete="current-password"
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div style={{ marginTop: 20 }}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ width: "100%", padding: "10px 16px", fontSize: "0.95rem" }}
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Signing In..." : "Sign In to Terminal [Enter]"}
+                </button>
+              </div>
+            </form>
+          )}
 
           <div
             style={{

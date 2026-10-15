@@ -1,11 +1,11 @@
 ; ==============================================================================
 ; Inno Setup 6 Script: Pharmacy POS (Offline Pharmacy Management System)
-; Version: 1.0.3
+; Version: 1.0.5
 ; Architecture: Windows 10 / 11 (x64)
 ; ==============================================================================
 
 #define MyAppName "MediHisaab"
-#define MyAppVersion "1.0.3"
+#define MyAppVersion "1.0.5"
 #define MyAppPublisher "Apex Health Technologies"
 #define MyAppURL "https://github.com/apex-health/pharmacy-pos"
 #define MyAppExeName "start-pharmacy.bat"
@@ -38,7 +38,7 @@ RestartApplications=no
 DisableProgramGroupPage=yes
 
 ; Version Info in Windows Explorer Properties
-VersionInfoVersion=1.0.3.0
+VersionInfoVersion=1.0.5.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=Offline Pharmacy Management System & POS
 VersionInfoCopyright=Copyright (C) 2026 {#MyAppPublisher}
@@ -98,6 +98,7 @@ Filename: "{sys}\wscript.exe"; Parameters: """{app}\start-pharmacy-hidden.vbs"""
 function GetDefaultInstallDir(Param: String): String;
 var
   LocalPrograms: String;
+  PrevInstall: String;
   FindRec: TFindRec;
   Candidate: String;
   FoundDir: String;
@@ -105,7 +106,18 @@ begin
   LocalPrograms := ExpandConstant('{localappdata}\Programs');
   FoundDir := '';
 
-  // Check specific existing versions first
+  // 1. Check registry uninstall key from previous Inno Setup installation
+  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{9F82C4A1-5B3E-4D78-9E1A-7A2B6C3D4E5F}_is1', 'InstallLocation', PrevInstall) or
+     RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{9F82C4A1-5B3E-4D78-9E1A-7A2B6C3D4E5F}_is1', 'InstallLocation', PrevInstall) then
+  begin
+    if (PrevInstall <> '') and DirExists(PrevInstall) and FileExists(PrevInstall + '\start-pharmacy.bat') then
+    begin
+      Result := PrevInstall;
+      Exit;
+    end;
+  end;
+
+  // 2. Check specific existing versions in Local Programs
   Candidate := LocalPrograms + '\MediHisaab-1.0.2';
   if FileExists(Candidate + '\start-pharmacy.bat') then
   begin

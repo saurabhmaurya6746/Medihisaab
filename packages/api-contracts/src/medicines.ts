@@ -146,3 +146,55 @@ export interface MedicineSearchResult {
   min_mrp_paise?: number | null;
   max_mrp_paise?: number | null;
 }
+
+/**
+ * Bulk Medicine Import contracts for CSV/Excel data ingestion.
+ */
+export type ImportRowStatus = "NEW" | "DUPLICATE" | "INVALID";
+export type DuplicatePolicy = "SKIP" | "UPDATE";
+
+export interface MedicineImportRow {
+  row_number: number;
+  brand_name: string;
+  generic_salt?: string;
+  dosage_form: DosageForm;
+  strength?: string | null;
+  pack_size: number;
+  manufacturer_name?: string | null;
+  hsn_code?: string;
+  gst_rate: GSTRate;
+  is_schedule_h1?: boolean;
+  is_schedule_h?: boolean;
+  is_narcotic?: boolean;
+  min_stock_units?: number;
+  rack_location?: string | null;
+  barcode?: string | null;
+  status: ImportRowStatus;
+  existing_id?: number | null;
+  errors: string[];
+}
+
+export interface MedicineImportPreviewResponse {
+  staging_token: string;
+  total_rows: number;
+  valid_rows: number;
+  duplicate_rows: number;
+  error_rows: number;
+  rows: MedicineImportRow[];
+}
+
+export interface MedicineImportExecuteInput {
+  staging_token?: string;
+  duplicate_policy: DuplicatePolicy;
+  rows?: MedicineImportRow[];
+}
+
+export interface MedicineImportExecuteResponse {
+  success: boolean;
+  inserted_count: number;
+  updated_count: number;
+  skipped_count: number;
+  failed_count: number;
+  message: string;
+}
+
