@@ -1,0 +1,3 @@
+﻿Medicine Name *,Generic Composition,Dosage Form,Strength,Pack Size *,Manufacturer,HSN Code,GST Rate %,Schedule H1 (YES/NO),Schedule H (YES/NO),Narcotic (YES/NO),Min Stock Units,Rack Location,Barcode
+Augmentin 625 Duo,Amoxicillin (500mg) + Clavulanic Acid (125mg),TABLET,625mg,10,GlaxoSmithKline Pharmaceuticals Ltd,3004,12,NO,YES,NO,15,A-01,8901234567890
+Dolo 650,Paracetamol,TABLET,650mg,15,Micro Labs Ltd,3004,12,NO,NO,NO,20,A-02,8901234567891

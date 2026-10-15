@@ -121,6 +121,18 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
 
         {/* Modal Body */}
         <div className="modal-body" style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv, .xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                handleFileChange(e.target.files[0]);
+              }
+            }}
+          />
+
           {errorMessage && (
             <div className="auth-error-banner" style={{ margin: 0 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -238,17 +250,6 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
               }}
               onClick={() => fileInputRef.current?.click()}
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv, .xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    handleFileChange(e.target.files[0]);
-                  }
-                }}
-              />
               <svg
                 width="40"
                 height="40"
@@ -294,11 +295,22 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
                   </span>
                   <button
                     type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={handleReset}
-                    style={{ fontSize: "0.76rem" }}
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = "";
+                        fileInputRef.current.click();
+                      }
+                    }}
+                    style={{ fontSize: "0.8rem", padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
+                    title="Choose a different file to preview"
                   >
-                    Change File
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    <span>Change File</span>
                   </button>
                 </div>
 
@@ -347,6 +359,48 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
                   <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#ef4444" }}>{previewData.error_rows}</div>
                 </div>
               </div>
+
+              {/* Warning Banner if all rows invalid */}
+              {previewData.valid_rows === 0 && previewData.duplicate_rows === 0 && (
+                <div
+                  style={{
+                    padding: "12px 16px",
+                    background: "rgba(239, 68, 68, 0.12)",
+                    border: "1px solid rgba(239, 68, 68, 0.35)",
+                    borderRadius: "var(--radius-md)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ fontSize: "0.84rem", color: "#f87171" }}>
+                    <strong>⚠️ No valid opening stock batches found in this file.</strong>
+                    <div style={{ marginTop: 3, color: "var(--text-muted)", fontSize: "0.78rem" }}>
+                      This file may be a Medicines Catalog master file. Opening Stock requires Batch Number, Expiry Date, and Packs Quantity.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = "";
+                        fileInputRef.current.click();
+                      }
+                    }}
+                    style={{ fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    <span>Choose Different File</span>
+                  </button>
+                </div>
+              )}
 
               {/* Preview Table */}
               <div
@@ -463,6 +517,27 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
             )}
           </div>
           <div style={{ display: "flex", gap: 10 }}>
+            {previewData && !executeResult && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                    fileInputRef.current.click();
+                  }
+                }}
+                disabled={isExecuting}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>Select New File</span>
+              </button>
+            )}
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isExecuting}>
               {executeResult ? "Close" : "Cancel"}
             </button>

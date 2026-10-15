@@ -1367,7 +1367,7 @@ async def preview_opening_stock_import(
             errors.append("Batch Number is required.")
 
         # Expiry date
-        expiry_raw = find_col(r, ["Expiry Date", "Expiry", "Exp Date", "Exp"])
+        expiry_raw = find_col(r, ["Expiry Date (YYYY-MM or YYYY-MM-DD)", "Expiry Date", "Expiry", "Exp Date", "Exp", "Batch Expiry"])
         expiry_norm = _normalize_expiry_date(expiry_raw)
         if not expiry_norm:
             errors.append(f"Invalid expiry date '{expiry_raw}'. Expected format YYYY-MM or YYYY-MM-DD.")
