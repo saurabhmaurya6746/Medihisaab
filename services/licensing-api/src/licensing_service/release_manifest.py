@@ -16,6 +16,21 @@ DIST_RELEASE_DIR = REPO_ROOT / "dist-release"
 
 # Official published releases
 OFFICIAL_RELEASES: Dict[str, Dict[str, Any]] = {
+    "1.0.8": {
+        "id": "installer-windows",
+        "title": "MediHisaab Windows Installer (v1.0.8)",
+        "version": "1.0.8",
+        "filename": "MediHisaab-Setup-1.0.8.exe",
+        "file_size": "122.5 MB (128,500,444 bytes)",
+        "file_size_bytes": 128500444,
+        "sha256": "79e0284d8e4fd9b6600796b952aeff3fed74516e4fd0a28d560e40cb093da0d4d",
+        "release_date": "October 2026",
+        "os": "Windows 10 / 11 (64-bit)",
+        "download_url": "/api/v1/client/downloads/installer-windows/file",
+        "direct_download_url": "https://github.com/saurabhmaurya6746/Medihisaab/releases/download/v1.0.8/MediHisaab-Setup-1.0.8.exe",
+        "is_installer": True,
+        "description": "MediHisaab desktop installer with reliable CSV/Excel sample downloads and visible download error feedback.",
+    },
     "1.0.7": {
         "id": "installer-windows",
         "title": "MediHisaab Windows Installer (v1.0.7)",
@@ -78,7 +93,7 @@ OFFICIAL_RELEASES: Dict[str, Dict[str, Any]] = {
     },
 }
 
-LATEST_RELEASE = OFFICIAL_RELEASES["1.0.7"]
+LATEST_RELEASE = OFFICIAL_RELEASES["1.0.8"]
 
 
 def get_latest_release_metadata() -> Dict[str, Any]:

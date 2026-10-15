@@ -96,7 +96,7 @@ export function DownloadPage() {
       // Stream binary with authentication token attached
       const downloadPath = record.download_url || "/api/v1/client/downloads/installer-windows/file";
       const fullDownloadUrl = buildAuthenticatedDownloadUrl(downloadPath, token);
-      const filename = record.filename || r.filename || "MediHisaab-Setup-1.0.7.exe";
+      const filename = record.filename || r.filename || "MediHisaab-Setup-1.0.8.exe";
 
       const link = document.createElement("a");
       link.href = fullDownloadUrl;

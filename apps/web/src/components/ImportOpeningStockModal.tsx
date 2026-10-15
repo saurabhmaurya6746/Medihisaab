@@ -28,6 +28,7 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
   const [previewData, setPreviewData] = useState<OpeningStockImportPreviewResponse | null>(null);
   const [duplicatePolicy, setDuplicatePolicy] = useState<OpeningStockDuplicatePolicy>("SKIP");
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
+  const [isDownloadingSample, setIsDownloadingSample] = useState<boolean>(false);
   const [executeResult, setExecuteResult] = useState<OpeningStockImportExecuteResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -82,6 +83,18 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
       setErrorMessage(msg);
     } finally {
       setIsExecuting(false);
+    }
+  };
+
+  const handleDownloadSample = async (format: "csv" | "xlsx") => {
+    setIsDownloadingSample(true);
+    setErrorMessage(null);
+    try {
+      await downloadOpeningStockImportTemplate(format);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Could not download the opening-stock sample file");
+    } finally {
+      setIsDownloadingSample(false);
     }
   };
 
@@ -173,7 +186,8 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={() => downloadOpeningStockImportTemplate("xlsx")}
+                onClick={() => void handleDownloadSample("xlsx")}
+                disabled={isDownloadingSample}
                 title="Download Excel sample file with example opening-stock batches"
               >
                 Download Sample Excel (.xlsx)
@@ -181,7 +195,8 @@ export const ImportOpeningStockModal: React.FC<ImportOpeningStockModalProps> = (
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={() => downloadOpeningStockImportTemplate("csv")}
+                onClick={() => void handleDownloadSample("csv")}
+                disabled={isDownloadingSample}
                 title="Download CSV sample file with example opening-stock batches"
               >
                 Download Sample CSV

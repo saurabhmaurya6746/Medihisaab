@@ -14,7 +14,7 @@ echo.
 
 set "REPO_ROOT=%~dp0.."
 set "DIST_DIR=%REPO_ROOT%\dist-release"
-set "STAGE_DIR=%DIST_DIR%\MediHisaab-v1.0.7"
+set "STAGE_DIR=%DIST_DIR%\MediHisaab-v1.0.8"
 
 echo [STEP 1/4] Building web frontend production bundle...
 cd /d "%REPO_ROOT%"
@@ -82,20 +82,20 @@ echo [SUCCESS] Staged application files successfully.
 
 echo.
 echo [STEP 3/4] Creating portable ZIP archive...
-powershell -Command "Compress-Archive -Path '%STAGE_DIR%\*' -DestinationPath '%DIST_DIR%\MediHisaab-v1.0.7-Portable.zip' -Force"
+powershell -Command "Compress-Archive -Path '%STAGE_DIR%\*' -DestinationPath '%DIST_DIR%\MediHisaab-v1.0.8-Portable.zip' -Force"
 if %ERRORLEVEL% equ 0 (
-  echo [SUCCESS] Created portable package: %DIST_DIR%\MediHisaab-v1.0.7-Portable.zip
+  echo [SUCCESS] Created portable package: %DIST_DIR%\MediHisaab-v1.0.8-Portable.zip
 )
 
 echo.
 echo [STEP 4/5] Building standalone setup installer...
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name MediHisaab-Setup-1.0.7 --icon "%REPO_ROOT%\assets\medihisaab-icon.ico" --add-data "%DIST_DIR%\MediHisaab-v1.0.7-Portable.zip;." --distpath "%DIST_DIR%" --workpath "%REPO_ROOT%\build\portable-installer" --specpath "%REPO_ROOT%\build\portable-installer" "%REPO_ROOT%\scripts\portable-installer.py"
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name MediHisaab-Setup-1.0.8 --icon "%REPO_ROOT%\assets\medihisaab-icon.ico" --add-data "%DIST_DIR%\MediHisaab-v1.0.8-Portable.zip;." --distpath "%DIST_DIR%" --workpath "%REPO_ROOT%\build\portable-installer" --specpath "%REPO_ROOT%\build\portable-installer" "%REPO_ROOT%\scripts\portable-installer.py"
 if %ERRORLEVEL% neq 0 (
   echo [ERROR] Standalone setup installer build failed!
   pause
   exit /b 1
 )
-  echo [SUCCESS] Created setup installer: %DIST_DIR%\MediHisaab-Setup-1.0.7.exe
+  echo [SUCCESS] Created setup installer: %DIST_DIR%\MediHisaab-Setup-1.0.8.exe
 
 echo.
 echo [STEP 5/5] Checking for Inno Setup Compiler ISCC.exe...
@@ -114,7 +114,7 @@ if defined ISCC_EXE (
   echo [INFO] Compiling Windows installer executable...
   "!ISCC_EXE!" "%REPO_ROOT%\installer\pharmacy-pos-installer.iss"
   if %ERRORLEVEL% equ 0 (
-    echo [SUCCESS] Windows installer compiled: %DIST_DIR%\MediHisaab-Setup-1.0.7.exe
+    echo [SUCCESS] Windows installer compiled: %DIST_DIR%\MediHisaab-Setup-1.0.8.exe
   ) else (
     echo [WARN] Inno Setup compilation encountered an issue. Portable zip is still available.
   )
@@ -129,6 +129,6 @@ echo.
 echo ==============================================================================
 echo  PACKAGING COMPLETE
   echo  Staged Folder:    %STAGE_DIR%
-  echo  Portable Archive: %DIST_DIR%\MediHisaab-v1.0.7-Portable.zip
+  echo  Portable Archive: %DIST_DIR%\MediHisaab-v1.0.8-Portable.zip
 echo ==============================================================================
 pause

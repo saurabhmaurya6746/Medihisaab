@@ -27,6 +27,7 @@ export const ImportMedicinesModal: React.FC<ImportMedicinesModalProps> = ({
   const [previewData, setPreviewData] = useState<MedicineImportPreviewResponse | null>(null);
   const [duplicatePolicy, setDuplicatePolicy] = useState<DuplicatePolicy>("SKIP");
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
+  const [isDownloadingSample, setIsDownloadingSample] = useState<boolean>(false);
   const [executeResult, setExecuteResult] = useState<MedicineImportExecuteResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -78,6 +79,18 @@ export const ImportMedicinesModal: React.FC<ImportMedicinesModalProps> = ({
       setErrorMessage(msg);
     } finally {
       setIsExecuting(false);
+    }
+  };
+
+  const handleDownloadSample = async (format: "csv" | "xlsx") => {
+    setIsDownloadingSample(true);
+    setErrorMessage(null);
+    try {
+      await downloadMedicineImportTemplate(format);
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Could not download the medicines sample file");
+    } finally {
+      setIsDownloadingSample(false);
     }
   };
 
@@ -158,7 +171,8 @@ export const ImportMedicinesModal: React.FC<ImportMedicinesModalProps> = ({
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={() => downloadMedicineImportTemplate("xlsx")}
+                onClick={() => void handleDownloadSample("xlsx")}
+                disabled={isDownloadingSample}
                 title="Download Excel sample file with example medicine rows"
               >
                 Download Sample Excel (.xlsx)
@@ -166,7 +180,8 @@ export const ImportMedicinesModal: React.FC<ImportMedicinesModalProps> = ({
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={() => downloadMedicineImportTemplate("csv")}
+                onClick={() => void handleDownloadSample("csv")}
+                disabled={isDownloadingSample}
                 title="Download CSV sample file with example medicine rows"
               >
                 Download Sample CSV

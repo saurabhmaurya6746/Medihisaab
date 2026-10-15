@@ -214,7 +214,8 @@ export async function downloadOpeningStockImportTemplate(format: "csv" | "xlsx" 
   document.body.appendChild(a);
   a.click();
   a.remove();
-  window.URL.revokeObjectURL(url);
+  // Keep the object URL alive until the browser has consumed the download.
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 }
 
 export async function previewOpeningStockImport(file: File): Promise<OpeningStockImportPreviewResponse> {
